@@ -1,6 +1,3 @@
 <resources>
     <string name="app_name">MyDemoService</string>
-    <string name="test">test en</string>
-    <string name="login">login</string>
-    <string name="connect">connect</string>
 </resources>

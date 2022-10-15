@@ -3,6 +3,10 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
+        <entry key="..\:/Users/rico/Desktop/learn_android/app/src/main/res/drawable/ic_launcher_background.xml" value="0.312" />
+        <entry key="..\:/Users/rico/Desktop/learn_android/app/src/main/res/drawable/selector_logbtn_xml.xml" value="0.312" />
+        <entry key="..\:/Users/rico/Desktop/learn_android/app/src/main/res/layout/activity_log.xml" value="0.30885416666666665" />
+        <entry key="..\:/Users/rico/Desktop/learn_android/app/src/main/res/layout/activity_login.xml" value="0.30885416666666665" />
         <entry key="..\:/Users/wkj/AndroidStudioProjects/MyDemoService/app/src/main/res/drawable/ic_launcher_background.xml" value="0.286" />
         <entry key="..\:/Users/wkj/AndroidStudioProjects/MyDemoService/app/src/main/res/drawable/logbtn_xml.xml" value="0.286" />
         <entry key="..\:/Users/wkj/AndroidStudioProjects/MyDemoService/app/src/main/res/layout/activity_bt.xml" value="0.315625" />

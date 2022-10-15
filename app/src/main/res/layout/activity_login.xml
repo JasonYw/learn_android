@@ -32,17 +32,9 @@
     <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/connect"
-        android:id="@+id/btn2"
+        android:text="connect"
+        android:id="@+id/connect"
         />
-
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="alert"
-        android:id="@+id/btn_alert"
-        />
-
 
 
 </LinearLayout>
