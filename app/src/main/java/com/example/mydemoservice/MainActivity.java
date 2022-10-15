@@ -40,9 +40,9 @@ public class MainActivity extends AppCompatActivity {
         intent.setClass(MainActivity.this,MyDemoShowLogActivity.class);
         String connect_host =  sp.getString("connect_host",null);
         String connect_port =  sp.getString("connect_port",null);
+        is_remember.setChecked(true);
         host.setText(connect_host);
         port.setText(connect_port);
-
     }
 
 
@@ -54,7 +54,6 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 URI connect_uri = URI.create("ws://"+host.getText().toString()+":"+port.getText().toString());
                 if(is_remember.isChecked()){
-
                     SharedPreferences.Editor edit = sp.edit();
                     edit.putString("connect_host",host.getText().toString());
                     edit.putString("connect_port",port.getText().toString());
