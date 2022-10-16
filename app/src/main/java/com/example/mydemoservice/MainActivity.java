@@ -1,6 +1,7 @@
 package com.example.mydemoservice;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -9,8 +10,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.ShareActionProvider;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import java.net.URI;
@@ -19,12 +18,12 @@ import java.net.URI;
 public class MainActivity extends AppCompatActivity {
 
     private Button connect;
-    private MeyDemoWebSocketClient client;
     private  SharedPreferences sp;
     private Intent intent;
     private  EditText host;
     private  EditText port;
     private  CheckBox is_remember;
+    private WebSocketClientUtil client;
 
 
     @Override
@@ -37,7 +36,7 @@ public class MainActivity extends AppCompatActivity {
         connect = findViewById(R.id.connect);
         sp = getSharedPreferences("uri",MODE_PRIVATE);
         intent = new Intent();
-        intent.setClass(MainActivity.this,MyDemoShowLogActivity.class);
+        intent.setClass(MainActivity.this, InfoActivity.class);
         String connect_host =  sp.getString("connect_host",null);
         String connect_port =  sp.getString("connect_port",null);
         is_remember.setChecked(true);
@@ -52,7 +51,11 @@ public class MainActivity extends AppCompatActivity {
         connect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                URI connect_uri = URI.create("ws://"+host.getText().toString()+":"+port.getText().toString());
+                URI connect_uri = URI.create("ws://localhost:8010/ws");
+                client = new WebSocketClientUtil(connect_uri);
+                client.connect();
+                Log.i("connect",String.valueOf(client.isOpen()));
+
                 if(is_remember.isChecked()){
                     SharedPreferences.Editor edit = sp.edit();
                     edit.putString("connect_host",host.getText().toString());
