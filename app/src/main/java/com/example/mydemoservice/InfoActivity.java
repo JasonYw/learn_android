@@ -18,31 +18,13 @@ public class InfoActivity extends AppCompatActivity {
     Button disconnect;
     Intent intent;
     WebSocketClientUtil client;
-    WebSocketService.WebSocketClientBinder binder;
-    WebSocketService webSocketService;
 
-
-
-    ServiceConnection serviceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            binder = (WebSocketService.WebSocketClientBinder) service;
-            webSocketService =binder.getService();
-            client = webSocketService.client;
-
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-        }
-    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_log);
         disconnect = findViewById(R.id.disconnect);
-        bindService();
         disconnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -55,10 +37,6 @@ public class InfoActivity extends AppCompatActivity {
     }
 
 
-    public void bindService() {
-        intent = new Intent(InfoActivity.this,WebSocketService.class);
-        bindService(intent,serviceConnection,BIND_AUTO_CREATE);
-    }
 
     public void onBackPressed(){
         Toast.makeText(InfoActivity.this,"please disconnect to back login activity",Toast.LENGTH_SHORT).show();
