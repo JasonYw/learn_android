@@ -50,17 +50,19 @@ public class WebSocketService extends Service {
         }
         Intent rc_intent = new Intent();
         rc_intent.setAction("MRecevier");
-        rc_intent.putExtra("is_connect",false);
+        rc_intent.putExtra("is_connect",initClient());
         sendBroadcast(rc_intent);
         return super.onStartCommand(intent, flags, startId);
     }
 
-    public void initClient(){
+    public boolean initClient(){
         String url = "ws://10.120.66.180:8425/ws";
         URI uri = URI.create(url);
         client = new WebSocketClientUtil(uri);
         client.connect();
         Log.i("WebSocketService",String.valueOf(WebSocketService.this.client.isOpen()));
+        return  client.isOpen();
+
     }
 
     @Nullable

@@ -21,7 +21,7 @@ public class WebSocketClientUtil extends WebSocketClient {
 
     @Override
     public void onMessage(String message) {
-        Log.i("WebSocketClientUtil", "onMessage()");
+        Log.i("WebSocketClientUtil", "onMessage:" + message);
 
     }
 
