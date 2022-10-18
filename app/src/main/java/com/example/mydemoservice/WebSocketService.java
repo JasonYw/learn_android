@@ -7,6 +7,8 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
@@ -27,6 +29,8 @@ import java.io.File;
 import java.lang.reflect.Array;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 
 public class WebSocketService extends Service {
@@ -138,10 +142,15 @@ public class WebSocketService extends Service {
         return Settings.Secure.getString(this.getContentResolver(),Settings.Secure.ANDROID_ID);
     }
 
-    private String getFilesAndPackage(){
+
+
+
+    private String getPackageInfo(){
         JSONObject data = new JSONObject();
-        File file_persisit = new File("/data/system/xsettings/mydemo/persisit");
         File[] templist;
+
+        //获取哪些app开启了hook
+        File file_persisit = new File("/data/system/xsettings/mydemo/persisit");
         templist = file_persisit.listFiles();
         ArrayList<String> persisit_list = new ArrayList<>();
         for(int i =0;i<templist.length;i++){
@@ -150,12 +159,13 @@ public class WebSocketService extends Service {
                 persisit_list.add(templist[i].getName());
             }
         }
-
         try {
             data.put("persisit", persisit_list);
         }catch (JSONException ex){
             Log.i("getFilesAndPackage",ex.toString());
         }
+
+        //获取app中的config
         File file_jsconfig = new File("/data/system/xsettings/mydemo/jscfg");
         templist = file_jsconfig.listFiles();
         ArrayList<String> jsconfig_list = new ArrayList<>();
@@ -170,6 +180,26 @@ public class WebSocketService extends Service {
         }catch (JSONException ex){
             Log.i("getFilesAndPackage",ex.toString());
         }
+
+        //获取所有app的版本信息
+        PackageManager pckMan = getPackageManager();
+        ArrayList<HashMap<String, Object>> items = new ArrayList<HashMap<String, Object>>();
+        List<PackageInfo> packageInfo = pckMan.getInstalledPackages(0);
+        for (PackageInfo pInfo : packageInfo) {
+            HashMap<String, Object> item = new HashMap<String, Object>();
+            item.put("appimage", pInfo.applicationInfo.loadIcon(pckMan));
+            item.put("packageName", pInfo.packageName);
+            item.put("versionCode", pInfo.versionCode);
+            item.put("versionName", pInfo.versionName);
+            item.put("appName", pInfo.applicationInfo.loadLabel(pckMan).toString());
+            items.add(item);
+        }
+        try {
+            data.put("appinfo",packageInfo);
+        }catch (JSONException ex){
+            Log.i("getFilesAndPackage",ex.toString());
+        }
+
         Log.i("getFilesAndPackage",data.toString());
         return  data.toString();
     }
