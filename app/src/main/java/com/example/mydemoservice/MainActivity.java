@@ -2,15 +2,17 @@ package com.example.mydemoservice;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.Manifest;
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -18,7 +20,11 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import java.net.URI;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.util.ArrayList;
 
 
 public class MainActivity extends AppCompatActivity {
@@ -35,21 +41,44 @@ public class MainActivity extends AppCompatActivity {
     Intent info_intent;
 
 
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.i("MainActivity","onCreate");
         setContentView(R.layout.activity_login);
+
+        //获取权限
+        String[] PERMISSIONS = {
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+        };
+        int PERMISSION_CODE = 123;
+        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
+            if(checkPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE,android.os.Process.myPid(),android.os.Process.myUid()) != PackageManager.PERMISSION_GRANTED){
+                requestPermissions(PERMISSIONS,PERMISSION_CODE);
+            }
+        }
+        getFilesAndPackage();
+        //初始化service intent 以及 Reciver 以及 下一个Activity intent
         m_receiver = new MainReceiver();
         IntentFilter filter = new IntentFilter();
         filter.addAction("MRecevier");
         registerReceiver(m_receiver,filter);
         info_intent = new Intent(MainActivity.this, InfoActivity.class);
         wb_intent =  new Intent(MainActivity.this, WebSocketService.class);
+
+        //初始化页面数据 以及存储
         sp = getSharedPreferences("uri",MODE_PRIVATE);
-        connect_host =  sp.getString("connect_host",null);
-        connect_port =  sp.getString("connect_port",null);
         is_remember = findViewById(R.id.remember);
         connect = findViewById(R.id.connect);
+        connect_host =  sp.getString("connect_host",null);
+        connect_port =  sp.getString("connect_port",null);
+        if (isServiceRunning(getPackageName()+".WebSocketService")){
+            Log.i("isServiceRunning","true");
+            startActivityForResult(info_intent,1);
+        }
         if(Boolean.valueOf(connect_host) && Boolean.valueOf(connect_port)){
             wb_intent.putExtra("connect_host",connect_host);
             wb_intent.putExtra("connect_port",connect_port);
@@ -60,6 +89,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        Log.i("MainActivity","onStart");
+        wb_intent.putExtra("connect_host",connect_host);
+        wb_intent.putExtra("connect_port",connect_port);
         connect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -82,21 +114,37 @@ public class MainActivity extends AppCompatActivity {
     class MainReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            boolean is_connected = intent.getBooleanExtra("is_connected",false);
-            Log.i("is_connected",String.valueOf(is_connected));
+            boolean is_connected = intent.getBooleanExtra("is_connect",false);
             if(is_connected){
+                Log.i("is_remember",String.valueOf(is_remember.isChecked()));
                 if(is_remember.isChecked()){
                     SharedPreferences.Editor edit = sp.edit();
                     edit.putString("connect_host",host.getText().toString());
                     edit.putString("connect_port",port.getText().toString());
                     edit.commit();
-                    Toast.makeText(MainActivity.this,"remember connect info",Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this,"connect success",Toast.LENGTH_SHORT).show();
                 }
                 startActivityForResult(info_intent,1);
             }else{
+                SharedPreferences.Editor edit = sp.edit();
+                edit.putString("connect_host",null);
+                edit.putString("connect_port",null);
+                edit.commit();
                 stopService(wb_intent);
+                Toast.makeText(MainActivity.this,"check host or port",Toast.LENGTH_SHORT).show();
             }
         }
+    }
+
+    private boolean isServiceRunning(String ServicePackageName) {
+        Log.i("ServicePackageName",ServicePackageName);
+        ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (ServicePackageName.equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
 
