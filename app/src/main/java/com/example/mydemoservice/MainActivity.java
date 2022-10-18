@@ -60,7 +60,6 @@ public class MainActivity extends AppCompatActivity {
                 requestPermissions(PERMISSIONS,PERMISSION_CODE);
             }
         }
-        getFilesAndPackage();
         //初始化service intent 以及 Reciver 以及 下一个Activity intent
         m_receiver = new MainReceiver();
         IntentFilter filter = new IntentFilter();

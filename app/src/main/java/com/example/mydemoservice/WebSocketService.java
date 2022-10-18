@@ -174,11 +174,6 @@ public class WebSocketService extends Service {
         return  data.toString();
     }
 
-
-
-
-
-
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
