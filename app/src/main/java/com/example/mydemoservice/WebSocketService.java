@@ -5,6 +5,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.bluetooth.BluetoothClass;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -12,6 +13,7 @@ import android.content.pm.PackageManager;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.text.format.Formatter;
@@ -26,6 +28,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.reflect.Array;
 import java.net.URI;
 import java.util.ArrayList;
@@ -39,6 +45,8 @@ public class WebSocketService extends Service {
     String port;
     WebSocketClientUtil client;
     Intent rc_intent = new Intent();
+    Thread connect_thread;
+    Thread reconnect_thread;
     private WebSocketServiceBinder wbbinder = new WebSocketServiceBinder();
 
     class WebSocketServiceBinder extends Binder{
@@ -47,8 +55,6 @@ public class WebSocketService extends Service {
         }
 
     }
-
-
 
     @Override
     public void onCreate() {
@@ -70,7 +76,35 @@ public class WebSocketService extends Service {
             Notification notification = new Notification.Builder(getApplicationContext(), "1").build();
             startForeground(1001, notification);
         }
+        reconnect_thread = new Thread() {
+            @Override
+            public void run() {
+                while (true) {
+                    if (client != null && client.isClosed()) {
+                        try {
+                            client.reconnectBlocking();
+                            while(!client.getReadyState().equals(ReadyState.OPEN)){};
+                            sendDeviceData();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        };
+        connect_thread = new Thread() {
+            @Override
+            public void run() {
+                client.connect();
+                while(!client.getReadyState().equals(ReadyState.OPEN)){};
+                rc_intent.putExtra("is_connect",client.isOpen());
+                sendBroadcast(rc_intent);
+                sendDeviceData();
+            }
+        };
+
         initClient();
+        reconnect_thread.start();
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -86,32 +120,57 @@ public class WebSocketService extends Service {
 
             @Override
             public void onError(Exception ex) {
-                Log.i("onError","SEND is_connect");
-                rc_intent.putExtra("is_connect",false);
-                sendBroadcast(rc_intent);
+                Log.i("error",ex.toString());
+                if(ex.toString().indexOf("Host unreachable") != -1){
+                    rc_intent.putExtra("is_connect",false);
+                    sendBroadcast(rc_intent);
+                }
+                if(ex.toString().indexOf("Connection refused") != -1){
+                    try {
+                        connect_thread.join();
+                        Log.i("onError","connect_thread join");
+                    }catch (InterruptedException ex1){
+                        Log.i("onError",ex.toString());
+                    }
+
+                }
                 super.onError(ex);
             }
 
             @Override
             public void onClose(int code, String reason, boolean remote) {
-                Log.i("WebSocketClientUtil","onClose");
+                Log.i("WebSocketClientUtil:onClose",reason);
                 super.onClose(code, reason, remote);
+            }
+
+            @Override
+            public void onMessage(String message) {
+                try {
+                    JSONObject json_message = new JSONObject(message);
+                    String task_name =  json_message.getString("task_name");
+                    String package_name = json_message.getString("package_name");
+                    String data  = json_message.getString("data");
+                    switch (task_name){
+                        case "open_app":
+                            openOtherApp(package_name);
+                        default:
+                            super.onMessage(message);
+                    }
+                }catch (JSONException ex) {
+                    this.send(ex.toString());
+                }
             }
         };
         client.setConnectionLostTimeout(110*1000);
         Toast.makeText(WebSocketService.this,"connecting...",Toast.LENGTH_LONG).show();
-        new Thread() {
-            @Override
-            public void run() {
-                client.connect();
-                while(!client.getReadyState().equals(ReadyState.OPEN)){};
-                rc_intent.putExtra("is_connect",client.isOpen());
-                sendBroadcast(rc_intent);
-            }
-        }.start();
-        while(!client.getReadyState().equals(ReadyState.OPEN)){};
-        sendDeviceData();
+        try{
+            reconnect_thread.join();
+        }catch (InterruptedException ex){
+            Log.i("reconnect_thread",ex.toString());
+        }
+        connect_thread.start();
     }
+
 
     private void sendDeviceData(){
         JSONObject data = new JSONObject();
@@ -142,8 +201,95 @@ public class WebSocketService extends Service {
         return Settings.Secure.getString(this.getContentResolver(),Settings.Secure.ANDROID_ID);
     }
 
+    private void controlHook(String package_name, Boolean on){
+        File file = new File("/data/system/xsettings/mydemo/persisit/"+package_name+"/persist_mydemo");
+        if(on){
+            if(!file.exists()){
+                Log.i("Control_hook","CREATE");
+                if(file.mkdirs()){
+                    Toast.makeText(WebSocketService.this,file.getAbsolutePath() + ":create success",Toast.LENGTH_SHORT).show();
+                }else{
+                    Toast.makeText(WebSocketService.this,file.getAbsolutePath() + ":create fail",Toast.LENGTH_SHORT).show();
+                }
+            }
+            Log.i("Control_hook",String.valueOf(file.exists()));
+        }else{
+            if(file.exists()){
+                Log.i("Control_hook","DELETE");
+                if(file.delete()){
+                    Toast.makeText(WebSocketService.this,file.getAbsolutePath() + ":delete success",Toast.LENGTH_SHORT).show();
+                }else{
+                    Toast.makeText(WebSocketService.this,file.getAbsolutePath() + ":delete fail",Toast.LENGTH_SHORT).show();
+                }
+            }else{
+                Toast.makeText(WebSocketService.this,file.getAbsolutePath() + ":delete success",Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
 
+    private String getJsConfig(String package_name){
+        try {
+            FileInputStream file = openFileInput("/data/system/xsettings/mydemo/jscfg/" + package_name + "config.js");
+            byte[] buffer = new byte[file.available()];
+            file.read(buffer);
+            String result = new String(buffer);
+            return result;
+        } catch (FileNotFoundException ex){
+            Toast.makeText(WebSocketService.this, "/data/system/xsettings/mydemo/jscfg/" + package_name + "config.js not Found",Toast.LENGTH_SHORT).show();
+            return "";
+        } catch (IOException ex){
+            Toast.makeText(WebSocketService.this, "/data/system/xsettings/mydemo/jscfg/" + package_name + "config.js io error",Toast.LENGTH_SHORT).show();
+            return "";
+        }
+    }
 
+    private boolean updateJsConfig(String package_name,String text){
+        File config_dir = new File("/data/system/xsettings/mydemo/jscfg/" + package_name);
+        if(!config_dir.exists()){
+            Log.i("Control_hook","CREATE");
+            if(!config_dir.mkdirs()){
+                Toast.makeText(WebSocketService.this,config_dir.getAbsolutePath() + ":create fail",Toast.LENGTH_SHORT).show();
+                return  false;
+            }
+        }
+        try {
+            FileOutputStream file = openFileOutput("/data/system/xsettings/mydemo/jscfg/" + package_name + " config.js", MODE_PRIVATE + MODE_WORLD_READABLE);
+            file.write(text.getBytes());
+            file.flush();
+            file.close();
+            Toast.makeText(WebSocketService.this,"/data/system/xsettings/mydemo/jscfg/" + package_name + " config.js:update success",Toast.LENGTH_SHORT).show();
+            return true;
+        }catch (FileNotFoundException ex){
+            Toast.makeText(WebSocketService.this,"/data/system/xsettings/mydemo/jscfg/" + package_name + " config.js:update fail",Toast.LENGTH_SHORT).show();
+            return false;
+        }catch (IOException ex){
+            Toast.makeText(WebSocketService.this,"/data/system/xsettings/mydemo/jscfg/" + package_name + " config.js:update fail",Toast.LENGTH_SHORT).show();
+            return false;
+        }
+
+    }
+
+    private boolean deleteJsConfig(String package_name){
+        File config_dir = new File("/data/system/xsettings/mydemo/jscfg/" + package_name + "config.js");
+        if(config_dir.exists()){
+            if(config_dir.delete()){
+                return true;
+            }else{
+                return false;
+            }
+        }else{
+            return true;
+        }
+    }
+
+    private void openOtherApp(String packageName){
+        Intent intent = getPackageManager().getLaunchIntentForPackage(packageName);
+        if (intent != null) {
+            if (!getPackageName().equals(packageName)) {
+                startActivity(intent);
+            }
+        }
+    }
 
     private String getPackageInfo(){
         JSONObject data = new JSONObject();

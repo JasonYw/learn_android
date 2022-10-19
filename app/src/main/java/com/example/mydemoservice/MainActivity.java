@@ -1,6 +1,8 @@
 package com.example.mydemoservice;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 
 import android.Manifest;
 import android.app.ActivityManager;
@@ -62,8 +64,6 @@ public class MainActivity extends AppCompatActivity {
                 requestPermissions(PERMISSIONS,PERMISSION_CODE);
             }
         }
-
-        getPackageInfo();
 
         //初始化service intent 以及 Reciver 以及 下一个Activity intent
         m_receiver = new MainReceiver();
@@ -138,63 +138,6 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(MainActivity.this,"check host or port",Toast.LENGTH_SHORT).show();
             }
         }
-    }
-
-    private String getPackageInfo(){
-        JSONObject data = new JSONObject();
-        File[] templist;
-
-        //获取哪些app开启了hook
-        File file_persisit = new File("/data/system/xsettings/mydemo/persisit");
-        templist = file_persisit.listFiles();
-        ArrayList<String> persisit_list = new ArrayList<>();
-        for(int i =0;i<templist.length;i++){
-            File tempfile = new File("/data/system/xsettings/mydemo/persisit/"+templist[i].getName()+"/persist_mydemo");
-            if(tempfile.exists()){
-                persisit_list.add(templist[i].getName());
-            }
-        }
-        try {
-            data.put("persisit", persisit_list);
-        }catch (JSONException ex){
-            Log.i("getFilesAndPackage",ex.toString());
-        }
-
-        //获取app中的config
-        File file_jsconfig = new File("/data/system/xsettings/mydemo/jscfg");
-        templist = file_jsconfig.listFiles();
-        ArrayList<String> jsconfig_list = new ArrayList<>();
-        for(int i =0;i<templist.length;i++){
-            File tempfile = new File("/data/system/xsettings/mydemo/jscfg/"+templist[i].getName()+"/config.js");
-            if(tempfile.exists()){
-                jsconfig_list.add(templist[i].getName());
-            }
-        }
-        try {
-            data.put("jsconfig",jsconfig_list);
-        }catch (JSONException ex){
-            Log.i("getFilesAndPackage",ex.toString());
-        }
-
-        //获取所有app的版本信息
-        PackageManager pckMan = getPackageManager();
-        ArrayList<HashMap<String, String>> items = new ArrayList();
-        List<PackageInfo> packageInfo = pckMan.getInstalledPackages(0);
-        for (PackageInfo pInfo : packageInfo) {
-            HashMap<String, String> item = new HashMap<String, String>();
-            item.put("packageName", pInfo.packageName);
-            item.put("versionName", pInfo.versionName);
-            item.put("appName", pInfo.applicationInfo.loadLabel(pckMan).toString());
-            items.add(item);
-        }
-        try {
-            data.put("appinfo",packageInfo);
-        }catch (JSONException ex){
-            Log.i("getFilesAndPackage",ex.toString());
-        }
-
-        Log.i("getFilesAndPackage",data.toString());
-        return  data.toString();
     }
 
     private boolean isServiceRunning(String ServicePackageName) {
