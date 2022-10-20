@@ -50,7 +50,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Log.i("MainActivity","onCreate");
         setContentView(R.layout.activity_login);
 
         //获取权限
@@ -93,12 +92,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-        Log.i("MainActivity","onStart");
         wb_intent.putExtra("connect_host",connect_host);
         wb_intent.putExtra("connect_port",connect_port);
         connect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                stopService(wb_intent);
                 host =findViewById(R.id.host);
                 port =findViewById(R.id.port);
                 connect_host = host.getText().toString();
@@ -120,7 +119,6 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             boolean is_connected = intent.getBooleanExtra("is_connect",false);
             if(is_connected){
-                Log.i("is_remember",String.valueOf(is_remember.isChecked()));
                 if(is_remember.isChecked()){
                     SharedPreferences.Editor edit = sp.edit();
                     edit.putString("connect_host",host.getText().toString());
@@ -141,7 +139,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isServiceRunning(String ServicePackageName) {
-        Log.i("ServicePackageName",ServicePackageName);
         ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
         for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
             if (ServicePackageName.equals(service.service.getClassName())) {

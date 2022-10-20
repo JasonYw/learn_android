@@ -81,10 +81,11 @@ public class WebSocketService extends Service {
             public void run() {
                 while (true) {
                     if (client != null && client.isClosed()) {
+                        Log.i("reconnect_thread","retry:" + host + ":"+ port);
                         try {
                             client.reconnectBlocking();
-                            while(!client.getReadyState().equals(ReadyState.OPEN)){};
-                            sendDeviceData();
+                            host = host;
+                            port = port;
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
@@ -95,16 +96,18 @@ public class WebSocketService extends Service {
         connect_thread = new Thread() {
             @Override
             public void run() {
-                client.connect();
-                while(!client.getReadyState().equals(ReadyState.OPEN)){};
-                rc_intent.putExtra("is_connect",client.isOpen());
-                sendBroadcast(rc_intent);
-                sendDeviceData();
+                try {
+                    client.connectBlocking();
+                }catch (InterruptedException ex){
+                    Log.i("connect_thread",ex.toString());
+
+                }
+//                client.connect();
+//                while(!client.getReadyState().equals(ReadyState.OPEN)){};
             }
         };
 
         initClient();
-        reconnect_thread.start();
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -115,26 +118,29 @@ public class WebSocketService extends Service {
 
             @Override
             public void onOpen(ServerHandshake handshakedata) {
+                reconnect_thread.interrupt();
+                Log.i("onOpen.isOpen",String.valueOf(client.isOpen()));
+                rc_intent.putExtra("is_connect",client.isOpen());
+                sendBroadcast(rc_intent);
+                sendDeviceData();
+//                while (connect_thread.isAlive()){}
+                Log.i("onOpen","reconnect_thread start");
+                reconnect_thread.start();
                 super.onOpen(handshakedata);
             }
 
             @Override
             public void onError(Exception ex) {
-                Log.i("error",ex.toString());
+                super.onError(ex);
+                Log.i("onError",ex.toString());
                 if(ex.toString().indexOf("Host unreachable") != -1){
                     rc_intent.putExtra("is_connect",false);
                     sendBroadcast(rc_intent);
                 }
                 if(ex.toString().indexOf("Connection refused") != -1){
-                    try {
-                        connect_thread.join();
-                        Log.i("onError","connect_thread join");
-                    }catch (InterruptedException ex1){
-                        Log.i("onError",ex.toString());
-                    }
-
+                    connect_thread.interrupt();
+                    Log.i("onError",ex.toString());
                 }
-                super.onError(ex);
             }
 
             @Override
@@ -153,6 +159,16 @@ public class WebSocketService extends Service {
                     switch (task_name){
                         case "open_app":
                             openOtherApp(package_name);
+                        case "check_config":
+                            getJsConfig(package_name);
+                        case "start_hook":
+                            controlHook(package_name,true);
+                        case "stop_hook":
+                            controlHook(package_name,false);
+                        case "update_config":
+                            updateJsConfig(package_name,data);
+                        case "delete_config":
+                            deleteJsConfig(package_name);
                         default:
                             super.onMessage(message);
                     }
@@ -161,13 +177,9 @@ public class WebSocketService extends Service {
                 }
             }
         };
-        client.setConnectionLostTimeout(110*1000);
+        client.setConnectionLostTimeout(5*1000);
         Toast.makeText(WebSocketService.this,"connecting...",Toast.LENGTH_LONG).show();
-        try{
-            reconnect_thread.join();
-        }catch (InterruptedException ex){
-            Log.i("reconnect_thread",ex.toString());
-        }
+        reconnect_thread.interrupt();
         connect_thread.start();
     }
 

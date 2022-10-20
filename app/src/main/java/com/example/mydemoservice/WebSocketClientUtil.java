@@ -17,24 +17,24 @@ public class WebSocketClientUtil extends WebSocketClient {
 
     @Override
     public void onOpen(ServerHandshake handshakedata) {
-        Log.i("WebSocketClientUtil", handshakedata.getHttpStatusMessage());
+        Log.i("WebSocketClientUtil:onOpen", handshakedata.getHttpStatusMessage());
 
     }
 
     @Override
     public void onMessage(String message) {
-        Log.i("WebSocketClientUtil", "onMessage:" + message);
+        Log.i("WebSocketClientUtil:onMessage", "onMessage:" + message);
 
     }
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        Log.i("WebSocketClientUtil",reason);
+        Log.i("WebSocketClientUtil:onClose",reason);
     }
 
     @Override
     public void onError(Exception ex) {
-        Log.i("WebSocketClientUtil", String.valueOf(ex));
+        Log.i("WebSocketClientUtil:onError", ex.toString());
     }
 
 }
