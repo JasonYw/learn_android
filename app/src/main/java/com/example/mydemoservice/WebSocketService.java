@@ -37,6 +37,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -323,9 +324,22 @@ public class WebSocketService extends Service {
     }
 
     public void closeOtherApp(String packageName){
-        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        am.killBackgroundProcesses(packageName);
-        Log.i("WebSocketService:closeOtherApp","close "+packageName+" success");
+        try {
+            ActivityManager am = (ActivityManager) this.getSystemService(ACTIVITY_SERVICE);
+            Method method = Class.forName("android.app.ActivityManager").getMethod("forceStopPackage", String.class);
+            method.invoke(am, packageName);
+            Log.i("WebSocketService:closeOtherApp","close "+packageName+" success");
+        } catch (ClassNotFoundException ex){
+            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
+        } catch (NoSuchMethodException ex) {
+            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
+        } catch (IllegalAccessException ex){
+            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
+        } catch (IllegalArgumentException ex){
+            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
+        } catch (ReflectiveOperationException ex){
+            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
+        }
     }
 
     private String getPackageInfo(){
