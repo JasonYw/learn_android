@@ -79,7 +79,6 @@ public class MainActivity extends AppCompatActivity {
         connect_host =  sp.getString("connect_host",null);
         connect_port =  sp.getString("connect_port",null);
         if (isServiceRunning(getPackageName()+".WebSocketService")){
-            Log.i("isServiceRunning","true");
             startActivityForResult(info_intent,1);
         }
         if(Boolean.valueOf(connect_host) && Boolean.valueOf(connect_port)){
@@ -128,10 +127,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 startActivityForResult(info_intent,1);
             }else{
-                SharedPreferences.Editor edit = sp.edit();
-                edit.putString("connect_host",null);
-                edit.putString("connect_port",null);
-                edit.commit();
                 stopService(wb_intent);
                 Toast.makeText(MainActivity.this,"check host or port",Toast.LENGTH_SHORT).show();
             }

@@ -31,7 +31,7 @@ public class InfoActivity extends AppCompatActivity {
 
         @Override
         public void onServiceDisconnected(ComponentName componentName) {
-            Log.i("InfoActivity","onServiceDisconnected");
+            Log.i("InfoActivity:onServiceDisconnected","onServiceDisconnected");
         }
     };
 
@@ -47,7 +47,11 @@ public class InfoActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 wbbinder.getService().client.close();
+                wbbinder.getService().client = null;
+                wbbinder.getService().connect_thread.interrupt();
+                wbbinder.getService().reconnect_thread.interrupt();
                 unbindService(conn);
+                stopService(wbintent);
                 setResult(2,intent);
                 finish();
             }
