@@ -9,8 +9,10 @@ import android.app.Service;
 import android.bluetooth.BluetoothClass;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
@@ -27,6 +29,7 @@ import androidx.annotation.Nullable;
 
 import org.java_websocket.enums.ReadyState;
 import org.java_websocket.handshake.ServerHandshake;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -41,6 +44,7 @@ import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 
@@ -87,12 +91,16 @@ public class WebSocketService extends Service {
             @Override
             public void run() {
                 Log.i("WebSocketService:reconnect_thread","reconnect_thread start");
-                if (client != null && client.isClosed()) {
-                    Log.i("WebSocketService:reconnect_thread","retry:" + host + ":"+ port);
-                    try {
-                        client.reconnectBlocking();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+                for(int i =0;i<50;i++) {
+                    if (client != null && client.isClosed()) {
+                        Log.i("WebSocketService:reconnect_thread", "retry:" + host + ":" + port);
+                        try {
+                            client.reconnectBlocking();
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }else{
+                        break;
                     }
                 }
 
@@ -186,12 +194,11 @@ public class WebSocketService extends Service {
                 }
             }
         };
-        client.setConnectionLostTimeout(5*1000);
+        client.setConnectionLostTimeout(500);
         reconnect_thread.interrupt();
         connect_thread.interrupt();
         connect_thread.start();
     }
-
 
     private void sendDeviceData(){
         JSONObject data = new JSONObject();
@@ -204,23 +211,6 @@ public class WebSocketService extends Service {
         } catch (JSONException ex) {
             client.send(data.toString());
         }
-    }
-
-    private String getOsName() {
-        return android.os.Build.VERSION.CODENAME;
-    }
-
-
-    private String getLocalIp () {
-        WifiManager wifiManager = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
-        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-        String ipAddress = Formatter.formatIpAddress(wifiInfo.getIpAddress());
-        return ipAddress;
-    }
-
-
-    private String getAndroidId(){
-        return Settings.Secure.getString(this.getContentResolver(),Settings.Secure.ANDROID_ID);
     }
 
     private void controlHook(String package_name, Boolean on){
@@ -244,6 +234,100 @@ public class WebSocketService extends Service {
         openOtherApp(package_name);
     }
 
+    private boolean updateEasyControlConfig(String package_name,String text){
+        String basedir = "/data/system/xsettings/mydemo/eccfg/";
+        File config_dir = new File(basedir + package_name);
+        if(!config_dir.exists()){
+            if(!config_dir.mkdirs()){
+                Log.i("WebSocketService:updateEasyControlConfig",package_name + " eccfg 创建失败");
+                return  false;
+            }
+        }
+        try {
+            Os.chmod(config_dir.getAbsolutePath(), 0777);
+            Log.i("WebSocketService:updateEasyControlConfig","chmod:"+config_dir.getAbsolutePath()+" success");
+        }catch (ErrnoException ex){
+            Log.i("WebSocketService:updateEasyControlConfig","chmod:"+config_dir.getAbsolutePath()+" error:"+ex.toString());
+        }
+        Log.i("WebSocketService:updateEasyControlConfig",package_name + " eccfg create success");
+
+        byte[] b_context = Base64.getDecoder().decode(text);
+        for(int i=0;i<b_context.length;i++){
+            if(b_context[i] < 0 ){
+                b_context[i] += 256;
+            }
+        }
+        try {
+            File config_js = new File(basedir + package_name + "/config.cfg");
+            FileOutputStream file = new FileOutputStream(config_js);
+            file.write(b_context);
+            file.flush();
+            file.close();
+            Os.chmod(config_js.getAbsolutePath(), 0777);
+            Log.i("WebSocketService:updateEasyControlConfig","创建文件成功");
+            closeOtherApp(package_name);
+            openOtherApp(package_name);
+            return true;
+        }catch (IOException|ErrnoException ex){
+            Log.i("WebSocketService:updateEasyControlConfig","创建文件失败:"+ex.toString());
+            return false;
+        }
+
+    }
+
+    private boolean updateJsConfig(String package_name,String text){
+        String basedir = "/data/system/xsettings/mydemo/jscfg/";
+        File config_dir = new File(basedir + package_name);
+        if(!config_dir.exists()){
+            if(!config_dir.mkdirs()){
+                Log.i("WebSocketService:updateJsConfig",package_name + " jsdir 创建失败");
+                return  false;
+            }
+        }
+        try {
+            Os.chmod(config_dir.getAbsolutePath(), 0777);
+            Log.i("WebSocketService:updateJsConfig","chmod:"+config_dir.getAbsolutePath()+" success");
+        }catch (ErrnoException ex){
+            Log.i("WebSocketService:updateJsConfig","chmod:"+config_dir.getAbsolutePath()+" error:"+ex.toString());
+        }
+        Log.i("WebSocketService:updateJsConfig",package_name + " jsdir create success");
+
+        byte[] b_context = Base64.getDecoder().decode(text);
+        for(int i=0;i<b_context.length;i++){
+            if(b_context[i] < 0 ){
+                b_context[i] += 256;
+            }
+        }
+        try {
+            File config_js = new File(basedir + package_name + "/config.js");
+            FileOutputStream file = new FileOutputStream(config_js);
+            file.write(b_context);
+            file.flush();
+            file.close();
+            Os.chmod(config_js.getAbsolutePath(), 0777);
+            Log.i("WebSocketService:updateJsConfig","创建文件成功");
+            closeOtherApp(package_name);
+            openOtherApp(package_name);
+            return true;
+        }catch (IOException|ErrnoException ex){
+            Log.i("WebSocketService:updateJsConfig","创建文件失败:"+ex.toString());
+            return false;
+        }
+    }
+
+    private boolean deleteJsConfig(String package_name){
+        File config_dir = new File("/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js");
+        if(config_dir.exists()){
+            if(config_dir.delete()){
+                return true;
+            }else{
+                return false;
+            }
+        }else{
+            return true;
+        }
+    }
+
     private String getJsConfig(String package_name){
         try {
             File file = new File("/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js");
@@ -261,56 +345,75 @@ public class WebSocketService extends Service {
         }
     }
 
-    private boolean updateJsConfig(String package_name,String text){
-        File config_dir = new File("/data/system/xsettings/mydemo/jscfg/" + package_name);
-        if(!config_dir.exists()){
-            if(!config_dir.mkdirs()){
-                Log.i("WebSocketService:updateJsConfig",package_name + " jsdir 创建失败");
-                return  false;
+    private String getPackageInfo(){
+        JSONObject data = new JSONObject();
+        JSONArray data_array = new JSONArray();
+        List<PackageInfo> pakcage_info = getPackageManager().getInstalledPackages(0);
+        for(int i=0;i<pakcage_info.size();i++){
+            if(!isSystemPakcage(pakcage_info.get(i).packageName)) {
+                JSONObject app_info = new JSONObject();
+                try {
+                    app_info.put("package_name", pakcage_info.get(i).packageName);
+                    app_info.put("is_system_package", isSystemPakcage(pakcage_info.get(i).packageName));
+                    app_info.put("app_name", getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pakcage_info.get(i).packageName, PackageManager.GET_META_DATA)).toString());
+                    app_info.put("version", pakcage_info.get(i).versionName);
+                    app_info.put("is_start_hook", isStartHook(pakcage_info.get(i).packageName));
+                    app_info.put("has_js_config", isHasJSConfig(pakcage_info.get(i).packageName));
+                    app_info.put("has_easy_control_config", isHasEasyControlConfig(pakcage_info.get(i).packageName));
+                    data_array.put(app_info);
+                } catch (JSONException ex) {
+                    continue;
+                } catch (PackageManager.NameNotFoundException ex) {
+                    continue;
+                }
+                Log.i("getPackageInfo", app_info.toString());
             }
         }
         try {
-            Os.chmod(config_dir.getAbsolutePath(), 0777);
-            Log.i("WebSocketService:updateJsConfig","chmod:"+config_dir.getAbsolutePath()+" success");
-        }catch (ErrnoException ex){
-            Log.i("WebSocketService:updateJsConfig","chmod:"+config_dir.getAbsolutePath()+" error:"+ex.toString());
-        }
-        Log.i("WebSocketService:updateJsConfig",package_name + " jsdir create success");
-        try {
-            File config_js = new File("/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js");
-            FileOutputStream file = new FileOutputStream(config_js);
-            file.write(text.getBytes());
-            file.flush();
-            file.close();
-            Os.chmod(config_js.getAbsolutePath(), 0777);
-            Log.i("WebSocketService:updateJsConfig","创建文件成功");
-            closeOtherApp(package_name);
-            openOtherApp(package_name);
-            return true;
-        }catch (FileNotFoundException ex){
-            Log.i("WebSocketService:updateJsConfig","创建文件失败:"+ex.toString());
-            return false;
-        }catch (IOException ex){
-            Log.i("WebSocketService:updateJsConfig","创建文件失败:"+ex.toString());
-            return false;
-        }catch (ErrnoException ex){
-            Log.i("WebSocketService:updateJsConfig","创建文件失败:"+ex.toString());
-            return false;
-        }
-
+            data.put("package_info", data_array);
+        } catch (JSONException ex){}
+        return  data.toString();
     }
 
-    private boolean deleteJsConfig(String package_name){
-        File config_dir = new File("/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js");
-        if(config_dir.exists()){
-            if(config_dir.delete()){
-                return true;
-            }else{
+    private String getOsName() {
+        return android.os.Build.VERSION.CODENAME;
+    }
+
+    private String getAndroidId(){
+        return Settings.Secure.getString(this.getContentResolver(),Settings.Secure.ANDROID_ID);
+    }
+
+    private String getLocalIp () {
+        WifiManager wifiManager = (WifiManager) this.getSystemService(Context.WIFI_SERVICE);
+        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+        String ipAddress = Formatter.formatIpAddress(wifiInfo.getIpAddress());
+        return ipAddress;
+    }
+
+    private boolean isStartHook(String package_name) {
+        String path = "/data/system/xsettings/mydemo/persisit/"+package_name+"/persist_mydemo";
+        return new File(path).exists();
+    }
+
+    private boolean isHasJSConfig(String package_name) {
+        String path = "/data/system/xsettings/mydemo/jscfg/"+package_name+"/config.js";
+        return new File(path).exists();
+    }
+
+    private boolean isHasEasyControlConfig(String package_name) {
+        String path = "/data/system/xsettings/mydemo/eccfg/"+package_name+"/config.js";
+        return new File(path).exists();
+    }
+
+    private boolean isSystemPakcage(String package_name){
+        try {
+            PackageInfo a = getPackageManager().getPackageInfo(package_name,0);
+            if ((a.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) <= 0){
                 return false;
             }
-        }else{
-            return true;
+        }catch (PackageManager.NameNotFoundException ex){
         }
+        return true;
     }
 
     private void openOtherApp(String packageName){
@@ -328,75 +431,12 @@ public class WebSocketService extends Service {
             ActivityManager am = (ActivityManager) this.getSystemService(ACTIVITY_SERVICE);
             Method method = Class.forName("android.app.ActivityManager").getMethod("forceStopPackage", String.class);
             method.invoke(am, packageName);
-            Log.i("WebSocketService:closeOtherApp","close "+packageName+" success");
-        } catch (ClassNotFoundException ex){
-            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
-        } catch (NoSuchMethodException ex) {
-            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
-        } catch (IllegalAccessException ex){
-            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
-        } catch (IllegalArgumentException ex){
-            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
-        } catch (ReflectiveOperationException ex){
-            Log.i("WebSocketService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
+            Log.i("EasyControlService:closeOtherApp","close "+packageName+" success");
+        } catch (IllegalArgumentException|ReflectiveOperationException ex){
+            Log.i("EasyControlService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
         }
     }
 
-    private String getPackageInfo(){
-        JSONObject data = new JSONObject();
-        File[] templist;
-
-        //获取哪些app开启了hook
-        File file_persisit = new File("/data/system/xsettings/mydemo/persisit");
-        templist = file_persisit.listFiles();
-        ArrayList<String> persisit_list = new ArrayList<>();
-        for(int i =0;i<templist.length;i++){
-            File tempfile = new File("/data/system/xsettings/mydemo/persisit/"+templist[i].getName()+"/persist_mydemo");
-            if(tempfile.exists()){
-                persisit_list.add(templist[i].getName());
-            }
-        }
-        try {
-            data.put("persisit", persisit_list);
-        }catch (JSONException ex){
-            Log.i("WebSocketService:getPackageInfo",ex.toString());
-        }
-
-        //获取app中的config
-        File file_jsconfig = new File("/data/system/xsettings/mydemo/jscfg");
-        templist = file_jsconfig.listFiles();
-        ArrayList<String> jsconfig_list = new ArrayList<>();
-        for(int i =0;i<templist.length;i++){
-            File tempfile = new File("/data/system/xsettings/mydemo/jscfg/"+templist[i].getName()+"/config.js");
-            if(tempfile.exists()){
-                jsconfig_list.add(templist[i].getName());
-            }
-        }
-        try {
-            data.put("jsconfig",jsconfig_list);
-        }catch (JSONException ex){
-            Log.i("WebSocketService:getPackageInfo",ex.toString());
-        }
-
-        //获取所有app的版本信息
-        PackageManager pckMan = getPackageManager();
-        ArrayList<HashMap<String, Object>> items = new ArrayList<HashMap<String, Object>>();
-        List<PackageInfo> packageInfo = pckMan.getInstalledPackages(0);
-        for (PackageInfo pInfo : packageInfo) {
-            HashMap<String, Object> item = new HashMap<String, Object>();
-            item.put("packageName", pInfo.packageName);
-            item.put("versionName", pInfo.versionName);
-            items.add(item);
-        }
-        try {
-            data.put("appinfo",items);
-        }catch (JSONException ex){
-            Log.i("WebSocketService:getPackageInfo",ex.toString());
-        }
-
-        Log.i("WebSocketService:getPackageInfo",data.toString());
-        return  data.toString();
-    }
 
     @Nullable
     @Override
