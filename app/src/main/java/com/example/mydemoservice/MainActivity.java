@@ -32,7 +32,7 @@ public class MainActivity extends AppCompatActivity {
     String connect_port;
     Intent wb_intent;
     Intent info_intent;
-    Intent ec_intent;
+    Intent s_intent;
 
 
     @Override
@@ -59,10 +59,10 @@ public class MainActivity extends AppCompatActivity {
         registerReceiver(m_receiver,filter);
         info_intent = new Intent(MainActivity.this, InfoActivity.class);
         wb_intent =  new Intent(MainActivity.this, WebSocketService.class);
-        ec_intent = new Intent(MainActivity.this,EasyControlService.class);
+        s_intent = new Intent(MainActivity.this,ScheduleService.class);
 
         //开启控制服务
-        startForegroundService(ec_intent);
+        startForegroundService(s_intent);
 
         //初始化页面数据 以及存储
         sp = getSharedPreferences("uri",MODE_PRIVATE);

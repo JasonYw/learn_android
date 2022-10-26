@@ -1,66 +1,37 @@
 package com.example.mydemoservice;
+import android.accessibilityservice.AccessibilityService;
 import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.os.IBinder;
 import android.util.Log;
-import androidx.annotation.Nullable;
-import java.io.File;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
-public class EasyControlService extends Service {
 
-    private ReentrantLock reentrant_lock = new ReentrantLock();
-    private Thread build_thread;
-    private Thread control_thread;
-    private ArrayList<Thread> thread_array = new ArrayList<>();
+public class EasyControlService extends AccessibilityService {
 
-    @Nullable
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+    private String package_name;
+    private Intent rc_intent = new Intent();
 
     @Override
     public void onCreate() {
-        Log.i("EasyControlService:onStartCommand","onCreate");
         super.onCreate();
-        build_thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (true){
-                    String[] package_list = listPackage();
-                    for(int i =0;i<package_list.length;i++){
-                        String package_name = package_list[i];
-                        if(!isInThreadArray(thread_array,package_name)){
-                            Thread temp = new Thread(new Runnable() {
-                                @Override
-                                public void run() {
 
-                                }
-                            });
-                            temp.setName(package_name);
-                            thread_array.add(temp);
-                        }
-                    }
-
-                }
-            }
-        });
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i("EasyControlService:onStartCommand","onStartCommand");
+        Log.i("EasyControlService:"+package_name,"onStartCommand");
         NotificationChannel channel = new NotificationChannel("1", "EasyControlService", NotificationManager.IMPORTANCE_HIGH);
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
@@ -68,66 +39,23 @@ public class EasyControlService extends Service {
             Notification notification = new Notification.Builder(getApplicationContext(), "1").build();
             startForeground(1001, notification);
         }
-        control_thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (true){
-                    for(int i =0;i<thread_array.size();i++){
-                        if(!thread_array.get(i).isAlive()){
-                            thread_array.get(i).start();
-                        }
-                    }
-                }
-
-            }
-        });
-        control_thread.start();
+        package_name = intent.getStringExtra("package_name");
+        Log.i("EasyControlService:onStartCommand",package_name+":start");
+        ArrayList<String> data = readFile(package_name);
+        Log.i("EasyControlService:data",data.toString());
+        for(int i=0;i<data.size();i++){
+            actionBytext(data.get(i));
+        }
+        rc_intent.setAction("SRecevier");
+        rc_intent.putExtra(package_name + "_is_finish",true);
+        sendBroadcast(rc_intent);
         return super.onStartCommand(intent, flags, startId);
     }
 
     @Override
     public void onDestroy() {
+        Log.i("EasyControlService:"+package_name,"onDestroy");
         super.onDestroy();
-    }
-
-    private String[] listPackage(){
-        List<PackageInfo> pakcage_info = getPackageManager().getInstalledPackages(0);
-        String[] data = {};
-        for(int i=0;i<pakcage_info.size();i++){
-            String package_name = pakcage_info.get(i).packageName;
-            if(!isSystemPakcage(package_name)) {
-                if(isStartHook(package_name) && isHasEasyControlConfig(package_name) && isHasJSConfig(package_name)) {
-                    data[i] = package_name;
-                }
-            }
-        }
-        return data;
-    }
-
-    private boolean isSystemPakcage(String package_name){
-        try {
-            PackageInfo a = getPackageManager().getPackageInfo(package_name,0);
-            if ((a.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) <= 0){
-                return false;
-            }
-        }catch (PackageManager.NameNotFoundException ex){
-        }
-        return true;
-    }
-
-    private boolean isStartHook(String package_name) {
-        String path = "/data/system/xsettings/mydemo/persisit/"+package_name+"/persist_mydemo";
-        return new File(path).exists();
-    }
-
-    private boolean isHasJSConfig(String package_name) {
-        String path = "/data/system/xsettings/mydemo/jscfg/"+package_name+"/config.js";
-        return new File(path).exists();
-    }
-
-    private boolean isHasEasyControlConfig(String package_name) {
-        String path = "/data/system/xsettings/mydemo/eccfg/"+package_name+"/config.js";
-        return new File(path).exists();
     }
 
     private void openOtherApp(String packageName){
@@ -151,12 +79,139 @@ public class EasyControlService extends Service {
         }
     }
 
-    public boolean isInThreadArray(ArrayList<Thread> thread_list,String package_name){
-        for(int i=0;i<thread_list.size();i++){
-            if(thread_list.get(i).getName() == package_name){
-                return true;
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent accessibilityEvent) {
+    }
+
+    @Override
+    public void onInterrupt() {
+    }
+
+    public ArrayList<String> readFile(String package_name){
+        ArrayList<String> lines = new ArrayList<>();
+        try {
+            String path = "/data/system/xsettings/mydemo/eccfg/" + package_name + "/config.cfg";
+            FileInputStream inputStream = new FileInputStream(path);
+            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream));
+            String str = null;
+            while ((str = bufferedReader.readLine()) != null) {
+                lines.add(str);
+            }
+            inputStream.close();
+            bufferedReader.close();
+        }catch (IOException ex){
+            Log.i("EasyControlService:readFile:"+package_name,ex.toString());
+        }
+        return  lines;
+    }
+
+    public void actionBytext(String text) {
+        String[] action = text.split(" ");
+        Log.i("EasyControlService:actionBytext",action.toString());
+        try {
+            switch (action[0]) {
+                case "am_start":
+                    openOtherApp(action[1]);
+                    break;
+                case "sleep":
+                    Thread.sleep(Integer.valueOf(action[1]).intValue());
+                    break;
+                case "click_by_id":
+                    clickViewByID(action[1]);
+                    break;
+                case "click_by_text":
+                    clickViewByText(action[1]);
+                    break;
+                case "back":
+                    performBackClick();
+                    break;
+                case "swipe_backward":
+                    performScrollBackward();
+                    break;
+                case "swipe_forward":
+                    performScrollForward();
+                    break;
+                default:
+                    break;
+            }
+        }catch (InterruptedException ex){}
+    }
+
+    public void performViewClick(AccessibilityNodeInfo nodeInfo) {
+        if (nodeInfo == null) {
+            return;
+        }
+        while (nodeInfo != null) {
+            if (nodeInfo.isClickable()) {
+                nodeInfo.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                break;
+            }
+            nodeInfo = nodeInfo.getParent();
+        }
+    }
+
+    /**
+     * 模拟返回操作
+     */
+    public void performBackClick() {
+        performGlobalAction(GLOBAL_ACTION_BACK);
+    }
+
+    /**
+     * 模拟下滑操作
+     */
+    public void performScrollBackward() {
+        performGlobalAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD);
+    }
+
+    /**
+     * 模拟上滑操作
+     */
+    public void performScrollForward() {
+        performGlobalAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);
+
+    }
+
+    /**
+     * 点击对应文本的一个view，前提是这个view能够点击，即 clickable == true，
+     *
+     * @param text 要查找的文本
+     */
+    public void clickViewByText(String text) {
+        AccessibilityNodeInfo accessibilityNodeInfo = getRootInActiveWindow();
+        if (accessibilityNodeInfo == null) {
+            return;
+        }
+        List<AccessibilityNodeInfo> nodeInfoList = accessibilityNodeInfo.findAccessibilityNodeInfosByText(text);
+        if (nodeInfoList != null && !nodeInfoList.isEmpty()) {
+            for (AccessibilityNodeInfo nodeInfo : nodeInfoList) {
+                if (nodeInfo != null) {
+                    performViewClick(nodeInfo);
+                    break;
+                }
             }
         }
-        return  false;
     }
+
+    /**
+     * 点击对应id的一个view，前提是这个view能够点击，即 clickable == true，
+     *
+     * @param id 要查找的id
+     */
+    public void clickViewByID(String id) {
+        AccessibilityNodeInfo accessibilityNodeInfo = getRootInActiveWindow();
+        if (accessibilityNodeInfo == null) {
+            return;
+        }
+        List<AccessibilityNodeInfo> nodeInfoList = accessibilityNodeInfo.findAccessibilityNodeInfosByViewId(id);
+        if (nodeInfoList != null && !nodeInfoList.isEmpty()) {
+            for (AccessibilityNodeInfo nodeInfo : nodeInfoList) {
+                if (nodeInfo != null) {
+                    performViewClick(nodeInfo);
+                    break;
+                }
+            }
+        }
+    }
+
 }

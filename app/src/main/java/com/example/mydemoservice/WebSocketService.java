@@ -6,28 +6,22 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
-import android.bluetooth.BluetoothClass;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
-import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.format.Formatter;
 import android.util.Log;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
-
-import org.java_websocket.enums.ReadyState;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -38,14 +32,9 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.List;
 
 
@@ -166,10 +155,7 @@ public class WebSocketService extends Service {
                     String package_name = json_message.getString("package_name");
                     String data  = json_message.getString("data");
                     switch (task_name){
-                        case "open_app":
-                            openOtherApp(package_name);
-                            break;
-                        case "check_config":
+                        case "check_js_config":
                             send(getJsConfig(package_name));
                             break;
                         case "start_hook":
@@ -178,10 +164,10 @@ public class WebSocketService extends Service {
                         case "stop_hook":
                             controlHook(package_name,false);
                             break;
-                        case "update_config":
+                        case "update_js_config":
                             updateJsConfig(package_name,data);
                             break;
-                        case "delete_config":
+                        case "delete_js_config":
                             deleteJsConfig(package_name);
                             break;
                         default:
@@ -401,7 +387,7 @@ public class WebSocketService extends Service {
     }
 
     private boolean isHasEasyControlConfig(String package_name) {
-        String path = "/data/system/xsettings/mydemo/eccfg/"+package_name+"/config.js";
+        String path = "/data/system/xsettings/mydemo/eccfg/"+package_name+"/config.cfg";
         return new File(path).exists();
     }
 

@@ -38,7 +38,8 @@
             android:exported="true">
         </activity>
         <service android:name=".WebSocketService"></service>
-        <service android:name=".EasyControlService"></service>
+        <service android:name=".EasyControlService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"></service>
+        <service android:name=".ScheduleService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"></service>
     </application>
 
 
