@@ -35,7 +35,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 
@@ -124,6 +123,7 @@ public class WebSocketService extends Service {
                 rc_intent.putExtra("is_connect",client.isOpen());
                 sendBroadcast(rc_intent);
                 sendDeviceData();
+                initConfig();
                 super.onOpen(handshakedata);
             }
 
@@ -157,9 +157,6 @@ public class WebSocketService extends Service {
                     String package_name = json_message.getString("package_name");
                     String data  = json_message.getString("data");
                     switch (task_name){
-                        case "check_js_config":
-                            send(getJsConfig(package_name));
-                            break;
                         case "start_hook":
                             controlHook(package_name,true);
                             break;
@@ -168,9 +165,7 @@ public class WebSocketService extends Service {
                             break;
                         case "update_js_config":
                             updateJsConfig(package_name,data);
-                            break;
-                        case "delete_js_config":
-                            deleteJsConfig(package_name);
+                            copy_config(package_name);
                             break;
                         default:
                             send("task_name not correct");
@@ -243,10 +238,8 @@ public class WebSocketService extends Service {
                 b_context[i] += 256;
             }
         }
-        String b_text = b_context.toString().replaceFirst("{host:port}","{"+host+":"+port+"}");
-        b_context = b_text.getBytes();
         try {
-            File config_js = new File(basedir + package_name + "/config.js");
+            File config_js = new File(basedir + package_name + "/base_config.js");
             FileOutputStream file = new FileOutputStream(config_js);
             file.write(b_context);
             file.flush();
@@ -260,34 +253,43 @@ public class WebSocketService extends Service {
         }
     }
 
-    private boolean deleteJsConfig(String package_name){
-        File config_dir = new File("/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js");
-        if(config_dir.exists()){
-            if(config_dir.delete()){
-                return true;
-            }else{
-                return false;
-            }
-        }else{
+    private boolean copy_config(String package_name){
+        String basedir = "/data/system/xsettings/mydemo/jscfg/";
+        try {
+            //读取模板脚本
+            File base_file = new File(basedir + package_name + "/base_config.js");
+            FileInputStream base_config_js = new FileInputStream(base_file);
+            byte[] buffer = new byte[base_config_js.available()];
+            base_config_js.read(buffer);
+            String result = new String(buffer).replace("{host}",host).replace("{port}",port);
+            //copy
+            File config_js = new File(basedir + package_name + "/base_config.js");
+            FileOutputStream file = new FileOutputStream(config_js);
+            file.write(result.getBytes());
+            file.flush();
+            file.close();
+            Os.chmod(config_js.getAbsolutePath(), 0777);
             return true;
+        } catch (ErrnoException|IOException ex){
+            Log.i("WebSocketService:copy_config",package_name + ":" + ex.toString());
         }
+        return false;
     }
 
-    private String getJsConfig(String package_name){
-        try {
-            File file = new File("/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js");
-            FileInputStream config_js = new FileInputStream(file);
-            byte[] buffer = new byte[config_js.available()];
-            config_js.read(buffer);
-            String result = new String(buffer);
-            return result;
-        } catch (FileNotFoundException ex){
-            Log.i("WebSocketService:getJsConfig","/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js not Found");
-            return "";
-        } catch (IOException ex){
-            Log.i("WebSocketService:getJsConfig",package_name + ":" + ex.toString());
-            return "";
+    private void initConfig(){
+        List<PackageInfo> pakcage_info = getPackageManager().getInstalledPackages(0);
+        for(int i=0;i<pakcage_info.size();i++) {
+            String pakcage_name = pakcage_info.get(i).packageName;
+            if (!isSystemPakcage(pakcage_name)) {
+                String basepath = "/data/system/xsettings/mydemo/jscfg/" + pakcage_name + "/base_config.js";
+                File file = new File(basepath);
+                if(file.exists()){
+                    copy_config(pakcage_name);
+                }
+
+            }
         }
+
     }
 
     private String getPackageInfo(){
@@ -304,7 +306,6 @@ public class WebSocketService extends Service {
                     app_info.put("version", pakcage_info.get(i).versionName);
                     app_info.put("is_start_hook", isStartHook(pakcage_info.get(i).packageName));
                     app_info.put("has_js_config", isHasJSConfig(pakcage_info.get(i).packageName));
-                    app_info.put("has_easy_control_config", isHasEasyControlConfig(pakcage_info.get(i).packageName));
                     data_array.put(app_info);
                 } catch (JSONException ex) {
                     continue;
