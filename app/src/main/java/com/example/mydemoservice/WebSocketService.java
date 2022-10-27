@@ -6,6 +6,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -34,6 +35,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 
@@ -42,18 +44,17 @@ public class WebSocketService extends Service {
 
     String host;
     String port;
-    private Process process;
     WebSocketClientUtil client;
     Intent rc_intent = new Intent();
     Thread connect_thread;
     Thread reconnect_thread;
+    WebSocketService.MainReceiver m_receiver;
     private WebSocketServiceBinder wbbinder = new WebSocketServiceBinder();
 
     class WebSocketServiceBinder extends Binder{
         public WebSocketService getService(){
             return  WebSocketService.this;
         }
-
     }
 
     @Override
@@ -64,6 +65,7 @@ public class WebSocketService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        m_receiver = new MainReceiver();
         host = intent.getStringExtra("connect_host");
         port = intent.getStringExtra("connect_port");
         Log.i("WebSocketService:onStartCommand",host);
@@ -216,49 +218,6 @@ public class WebSocketService extends Service {
             Boolean stop = file.delete();
             Log.i("WebSocketService:controlHook",package_name +" stop:"+stop.toString());
         }
-        closeOtherApp(package_name);
-        openOtherApp(package_name);
-    }
-
-    private boolean updateEasyControlConfig(String package_name,String text){
-        String basedir = "/data/system/xsettings/mydemo/eccfg/";
-        File config_dir = new File(basedir + package_name);
-        if(!config_dir.exists()){
-            if(!config_dir.mkdirs()){
-                Log.i("WebSocketService:updateEasyControlConfig",package_name + " eccfg 创建失败");
-                return  false;
-            }
-        }
-        try {
-            Os.chmod(config_dir.getAbsolutePath(), 0777);
-            Log.i("WebSocketService:updateEasyControlConfig","chmod:"+config_dir.getAbsolutePath()+" success");
-        }catch (ErrnoException ex){
-            Log.i("WebSocketService:updateEasyControlConfig","chmod:"+config_dir.getAbsolutePath()+" error:"+ex.toString());
-        }
-        Log.i("WebSocketService:updateEasyControlConfig",package_name + " eccfg create success");
-
-        byte[] b_context = Base64.getDecoder().decode(text);
-        for(int i=0;i<b_context.length;i++){
-            if(b_context[i] < 0 ){
-                b_context[i] += 256;
-            }
-        }
-        try {
-            File config_js = new File(basedir + package_name + "/config.cfg");
-            FileOutputStream file = new FileOutputStream(config_js);
-            file.write(b_context);
-            file.flush();
-            file.close();
-            Os.chmod(config_js.getAbsolutePath(), 0777);
-            Log.i("WebSocketService:updateEasyControlConfig","创建文件成功");
-            closeOtherApp(package_name);
-            openOtherApp(package_name);
-            return true;
-        }catch (IOException|ErrnoException ex){
-            Log.i("WebSocketService:updateEasyControlConfig","创建文件失败:"+ex.toString());
-            return false;
-        }
-
     }
 
     private boolean updateJsConfig(String package_name,String text){
@@ -284,6 +243,8 @@ public class WebSocketService extends Service {
                 b_context[i] += 256;
             }
         }
+        String b_text = b_context.toString().replaceFirst("{host:port}","{"+host+":"+port+"}");
+        b_context = b_text.getBytes();
         try {
             File config_js = new File(basedir + package_name + "/config.js");
             FileOutputStream file = new FileOutputStream(config_js);
@@ -292,8 +253,6 @@ public class WebSocketService extends Service {
             file.close();
             Os.chmod(config_js.getAbsolutePath(), 0777);
             Log.i("WebSocketService:updateJsConfig","创建文件成功");
-            closeOtherApp(package_name);
-            openOtherApp(package_name);
             return true;
         }catch (IOException|ErrnoException ex){
             Log.i("WebSocketService:updateJsConfig","创建文件失败:"+ex.toString());
@@ -402,24 +361,21 @@ public class WebSocketService extends Service {
         return true;
     }
 
-    private void openOtherApp(String packageName){
-        Intent intent = getPackageManager().getLaunchIntentForPackage(packageName);
-        if (intent != null) {
-            if (!getPackageName().equals(packageName)) {
-                startActivity(intent);
-                Log.i("WebSocketService:openOtherApp","open "+packageName+" success");
-            }
-        }
-    }
 
-    public void closeOtherApp(String packageName){
-        try {
-            ActivityManager am = (ActivityManager) this.getSystemService(ACTIVITY_SERVICE);
-            Method method = Class.forName("android.app.ActivityManager").getMethod("forceStopPackage", String.class);
-            method.invoke(am, packageName);
-            Log.i("EasyControlService:closeOtherApp","close "+packageName+" success");
-        } catch (IllegalArgumentException|ReflectiveOperationException ex){
-            Log.i("EasyControlService:closeOtherApp","close "+packageName+" fail:"+ex.toString());
+    class MainReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String app_status = intent.getStringExtra("app_status");
+            if(client != null && client.isOpen()){
+                try{
+                    JSONObject data = new JSONObject();
+                    data.put("app_status",app_status);
+                    client.send(data.toString());
+                }catch (JSONException ex){
+                    Log.i("WebSocketService.MainReceiver",ex.toString());
+                }
+
+            }
         }
     }
 
