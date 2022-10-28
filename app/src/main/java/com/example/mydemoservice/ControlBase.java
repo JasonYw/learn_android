@@ -8,6 +8,7 @@ import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import java.io.File;
 import java.lang.reflect.Method;
 import java.util.List;
 
@@ -17,13 +18,21 @@ public class ControlBase extends AccessibilityService {
     public Intent control_intent = new Intent();
     public String class_name = this.getClass().getName();
     public String package_name;
-    private String service_name;
+    public String base_config;
+    public String base_hook;
+    public String service_name;
     public SharedPreferences sp;
-    public   SharedPreferences.Editor editor;
+    public SharedPreferences.Editor editor;
+    public Boolean hook_exists;
+    public Boolean config_exists;
 
 
     @Override
     public void onCreate() {
+        base_config = "/data/system/xsettings/mydemo/jscfg/" + package_name + "/config.js";
+        base_hook = "/data/system/xsettings/mydemo/persisit/" + package_name + "/persist_mydemo";
+        hook_exists = new File(base_hook).exists();
+        config_exists = new File(base_config).exists();
         control_intent.setAction("control_intent");
         sp = getSharedPreferences("uri",MODE_PRIVATE);
         editor = sp.edit();
@@ -32,15 +41,26 @@ public class ControlBase extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        closeApp();
         control_intent.putExtra("app_status",service_name+":destroy");
+        Log.i(service_name+":onDestroy","send_app_status");
         super.onDestroy();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.i(class_name ,":onStartCommand");
+        Log.i(service_name ,":onStartCommand");
+        Log.i("config_exists",config_exists.toString());
+        Log.i("hook_exists",hook_exists.toString());
+        if(!config_exists|!hook_exists){
+            stopSelf(startId);
+        }else{
+            start_control();
+        }
         return super.onStartCommand(intent, flags, startId);
+    }
+
+    public void start_control(){
+        Log.i(service_name,"start_control");
     }
 
     public void closeApp(){

@@ -5,11 +5,14 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.Manifest;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -18,6 +21,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.Toast;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -36,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Log.i("MainActivity","onCreate");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
@@ -72,17 +77,15 @@ public class MainActivity extends AppCompatActivity {
         connect_host =  sp.getString("connect_host",null);
         connect_port =  sp.getString("connect_port",null);
         if (isServiceRunning(getPackageName()+".WebSocketService")){
-            startActivityForResult(info_intent,1);
-        }
-        if(Boolean.valueOf(connect_host) && Boolean.valueOf(connect_port)){
-            wb_intent.putExtra("connect_host",connect_host);
-            wb_intent.putExtra("connect_port",connect_port);
-            startForegroundService(wb_intent);
+            Log.i("MainActivity:onCreate","startActivity");
+            startActivity(info_intent);
         }
     }
 
     @Override
     protected void onStart() {
+        Log.i("MainActivity","onStart");
+
         super.onStart();
         //初始化init
         wb_intent.putExtra("connect_host",connect_host);
@@ -112,14 +115,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-    }
-
     class MainReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
+            Log.i("MainActivity:onReceive","get msg");
             boolean is_connected = intent.getBooleanExtra("is_connect",false);
             if(is_connected){
                 if(is_remember.isChecked()){
@@ -127,14 +126,21 @@ public class MainActivity extends AppCompatActivity {
                     editor.putString("connect_port",port.getText().toString());
                     editor.commit();
                     Log.i("MainActivity:onReceive","edit commit");
+                    connect.setText("checking update");
+                    boolean check_update = intent.getBooleanExtra("check_update",false);
+                    if(check_update){
+                        connect.setText("updating");
+                    }
                 }
-                startActivityForResult(info_intent,1);
+                connect.setEnabled(true);
+                connect.setText("connect");
+                startActivity(info_intent);
             }else{
                 stopService(wb_intent);
                 Log.i("MainActivity:onReceive","stopService");
+                connect.setEnabled(true);
+                connect.setText("connect");
             }
-            connect.setEnabled(true);
-            connect.setText("connect");
         }
     }
 
@@ -147,6 +153,10 @@ public class MainActivity extends AppCompatActivity {
         }
         return false;
     }
+
+
+    public void onBackPressed(){}
+
 
 
 }

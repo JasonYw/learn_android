@@ -2,19 +2,23 @@ package com.example.mydemoservice;
 
 
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
+import android.os.Environment;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.system.ErrnoException;
@@ -23,18 +27,25 @@ import android.text.format.Formatter;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+
+import com.example.mydemoservice.control.wechat.OfficialAccountsService;
+
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URL;
 import java.util.Base64;
 import java.util.List;
 
@@ -122,8 +133,19 @@ public class WebSocketService extends Service {
                 Log.i("WebSocketService:onOpen","isOpen:" + String.valueOf(client.isOpen()));
                 rc_intent.putExtra("is_connect",client.isOpen());
                 sendBroadcast(rc_intent);
-                sendDeviceData();
-                initConfig();
+                if(client.isOpen()){
+                    if (check_update()){
+                        rc_intent.putExtra("check_update",true);
+                        sendBroadcast(rc_intent);
+                        update_apk();
+                    }else{
+                        rc_intent.putExtra("check_update",false);
+                        sendBroadcast(rc_intent);
+                    }
+                    sendDeviceData();
+                    initConfig();
+                    startService(new Intent(WebSocketService.this,OfficialAccountsService.class));
+                }
                 super.onOpen(handshakedata);
             }
 
@@ -263,8 +285,11 @@ public class WebSocketService extends Service {
             base_config_js.read(buffer);
             String result = new String(buffer).replace("{host}",host).replace("{port}",port);
             //copy
-            File config_js = new File(basedir + package_name + "/base_config.js");
+            File config_js = new File(basedir + package_name + "/config.js");
             FileOutputStream file = new FileOutputStream(config_js);
+            config_js.setWritable(true);
+            config_js.setExecutable(true);
+            config_js.setReadable(true);
             file.write(result.getBytes());
             file.flush();
             file.close();
@@ -342,12 +367,7 @@ public class WebSocketService extends Service {
     }
 
     private boolean isHasJSConfig(String package_name) {
-        String path = "/data/system/xsettings/mydemo/jscfg/"+package_name+"/config.js";
-        return new File(path).exists();
-    }
-
-    private boolean isHasEasyControlConfig(String package_name) {
-        String path = "/data/system/xsettings/mydemo/eccfg/"+package_name+"/config.cfg";
+        String path = "/data/system/xsettings/mydemo/jscfg/"+package_name+"/base_config.js";
         return new File(path).exists();
     }
 
@@ -362,6 +382,52 @@ public class WebSocketService extends Service {
         return true;
     }
 
+    public boolean check_update(){
+        try {
+            PackageManager packageManager = getPackageManager();
+            //getPackageName()是你当前类的包名，0代表是获取版本信息
+            PackageInfo packInfo = packageManager.getPackageInfo(getPackageName(), 0);
+            String versio_name = packInfo.versionName;
+            Log.i("check_update",packInfo.versionName);
+            if(get_new_version() > Double.valueOf(versio_name));
+                return true;
+        } catch (PackageManager.NameNotFoundException ex){}
+        return  false;
+    }
+
+    public double get_new_version(){
+        return  1.1;
+    }
+
+    public void update_apk(){
+        //如果相等的话表示当前的sdcard挂载在手机上并且是可用的
+        String uri = "https://"+host+":"+port+"//";
+        try {
+            if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+                URL url = new URL(uri);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(5000);
+                //获取到文件的大小
+                InputStream is = conn.getInputStream();
+                long time = System.currentTimeMillis();//当前时间的毫秒数
+                File file = new File(Environment.getExternalStorageDirectory(), time + "updata.apk");
+                FileOutputStream fos = new FileOutputStream(file);
+                BufferedInputStream bis = new BufferedInputStream(is);
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = bis.read(buffer)) != -1) {
+                    fos.write(buffer, 0, len);
+                }
+                fos.close();
+                bis.close();
+                is.close();
+                Intent intent = new Intent();
+                intent.setAction(Intent.ACTION_VIEW);
+                intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive");
+                startActivity(intent);
+            }
+        }catch (IOException ex){};
+    }
 
     class MainReceiver extends BroadcastReceiver {
         @Override
@@ -380,16 +446,10 @@ public class WebSocketService extends Service {
         }
     }
 
-
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
         return wbbinder;
     }
 
-    @Override
-    public void onDestroy() {
-        Log.i("WebSocketService:onDestroy","onDestroy");
-        super.onDestroy();
-    }
 }
