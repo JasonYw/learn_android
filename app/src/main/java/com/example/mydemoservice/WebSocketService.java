@@ -18,6 +18,7 @@ import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
 import android.provider.Settings;
@@ -27,6 +28,7 @@ import android.text.format.Formatter;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.core.content.FileProvider;
 
 import com.example.mydemoservice.control.wechat.OfficialAccountsService;
 
@@ -167,6 +169,8 @@ public class WebSocketService extends Service {
                 if(code != 1000){
                     reconnect_thread.interrupt();
                     reconnect_thread.start();
+                }else{
+                    stopService(new Intent(WebSocketService.this,OfficialAccountsService.class));
                 }
             }
 
@@ -350,6 +354,41 @@ public class WebSocketService extends Service {
         return android.os.Build.VERSION.CODENAME;
     }
 
+    public void update_apk(){
+
+        //如果相等的话表示当前的sdcard挂载在手机上并且是可用的
+        // http://10.120.66.180:8425/file
+        String uri = "http://" + host + ":" + port +"/file";
+        String path = "/storage/emulated/0/Download/com.example.mydemoservice_update.apk";
+        try {
+            URL url = new URL(uri);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(5000);
+            //获取到文件的大小
+            InputStream is = conn.getInputStream();
+            File file = new File(path);
+            FileOutputStream fos = new FileOutputStream(file);
+            BufferedInputStream bis = new BufferedInputStream(is);
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = bis.read(buffer)) != -1) {
+                fos.write(buffer, 0, len);
+            }
+            fos.close();
+            bis.close();
+            is.close();
+            Uri contentUri = FileProvider.getUriForFile(WebSocketService.this, "com.example.mydemoservice", file);
+            Intent intent = new Intent(Intent.ACTION_VIEW,contentUri);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+            startActivity(intent);
+        }catch (IOException ex){
+            Log.i("update_apk",ex.toString());
+        };
+
+    }
+
     private String getAndroidId(){
         return Settings.Secure.getString(this.getContentResolver(),Settings.Secure.ANDROID_ID);
     }
@@ -392,42 +431,13 @@ public class WebSocketService extends Service {
             if(get_new_version() > Double.valueOf(versio_name));
                 return true;
         } catch (PackageManager.NameNotFoundException ex){}
-        return  false;
+        return  true;
     }
 
     public double get_new_version(){
-        return  1.1;
+        return  1.5;
     }
 
-    public void update_apk(){
-        //如果相等的话表示当前的sdcard挂载在手机上并且是可用的
-        String uri = "https://"+host+":"+port+"//";
-        try {
-            if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-                URL url = new URL(uri);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(5000);
-                //获取到文件的大小
-                InputStream is = conn.getInputStream();
-                long time = System.currentTimeMillis();//当前时间的毫秒数
-                File file = new File(Environment.getExternalStorageDirectory(), time + "updata.apk");
-                FileOutputStream fos = new FileOutputStream(file);
-                BufferedInputStream bis = new BufferedInputStream(is);
-                byte[] buffer = new byte[1024];
-                int len;
-                while ((len = bis.read(buffer)) != -1) {
-                    fos.write(buffer, 0, len);
-                }
-                fos.close();
-                bis.close();
-                is.close();
-                Intent intent = new Intent();
-                intent.setAction(Intent.ACTION_VIEW);
-                intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive");
-                startActivity(intent);
-            }
-        }catch (IOException ex){};
-    }
 
     class MainReceiver extends BroadcastReceiver {
         @Override

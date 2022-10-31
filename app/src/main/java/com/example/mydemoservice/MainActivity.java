@@ -1,6 +1,7 @@
 package com.example.mydemoservice;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
 
 import android.Manifest;
@@ -14,14 +15,24 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Toast;
+
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -55,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
                 requestPermissions(PERMISSIONS,PERMISSION_CODE);
             }
         }
+
 
         //初始化service intent 以及 Reciver 以及 下一个Activity intent
         m_receiver = new MainReceiver();
