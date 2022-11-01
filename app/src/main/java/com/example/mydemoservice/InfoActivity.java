@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
@@ -28,6 +29,9 @@ public class InfoActivity extends AppCompatActivity {
         setContentView(R.layout.activity_log);
         Log.i("InfoActivity","onCreate");
         m_receiver = new InfoActivity.MainReceiver();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction("MRecevier");
+        registerReceiver(m_receiver,filter);
         wbintent = new Intent(InfoActivity.this,WebSocketService.class);
         disconnect = findViewById(R.id.disconnect);
     }
@@ -35,6 +39,7 @@ public class InfoActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+
         Log.i("InfoActivity","onStart");
         disconnect.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -49,11 +54,18 @@ public class InfoActivity extends AppCompatActivity {
     class MainReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            Log.i("InfoActivity:onReceive","get msg");
-            boolean is_connected = intent.getBooleanExtra("is_connect", false);
-            if (!is_connected) {
-                stopService(wbintent);
-                startActivity(new Intent(InfoActivity.this,MainActivity.class));
+            String WebSocketServiceState = intent.getStringExtra("WebSocketServiceState");
+            Log.i("InfoActivity:onReceive","WebSocketServiceState:"+WebSocketServiceState);
+            switch (WebSocketServiceState){
+                case "reconnect":
+                    startActivity(new Intent(InfoActivity.this,MainActivity.class));
+                    break;
+                case "connect_close":
+                    stopService(wbintent);
+                    startActivity(new Intent(InfoActivity.this,MainActivity.class));
+                    break;
+                default:
+                    break;
             }
         }
     }

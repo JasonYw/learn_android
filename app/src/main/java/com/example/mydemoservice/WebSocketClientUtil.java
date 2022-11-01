@@ -1,5 +1,6 @@
 package com.example.mydemoservice;
 
+import android.content.Intent;
 import android.util.Log;
 
 import org.java_websocket.client.WebSocketClient;
@@ -31,6 +32,7 @@ public class WebSocketClientUtil extends WebSocketClient {
     public void onClose(int code, String reason, boolean remote) {
         Log.i("WebSocketClientUtil:onClose",reason);
     }
+
 
     @Override
     public void onError(Exception ex) {

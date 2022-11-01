@@ -50,6 +50,8 @@ import java.net.URI;
 import java.net.URL;
 import java.util.Base64;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 
 public class WebSocketService extends Service {
@@ -59,13 +61,37 @@ public class WebSocketService extends Service {
     WebSocketClientUtil client;
     Intent rc_intent = new Intent();
     Thread connect_thread;
-    Thread reconnect_thread;
     WebSocketService.MainReceiver m_receiver;
     private WebSocketServiceBinder wbbinder = new WebSocketServiceBinder();
 
     class WebSocketServiceBinder extends Binder{
         public WebSocketService getService(){
             return  WebSocketService.this;
+        }
+    }
+
+
+    public class ReconnectThread implements Runnable {
+        public void run() {
+            Log.i("WebSocketService:reconnect_thread","reconnect_thread start");
+            Log.i("WebSocketService:reconnect_thread", "retry:" + host + ":" + port);
+            rc_intent.putExtra("WebSocketServiceState","reconnect");
+            sendBroadcast(rc_intent);
+            long startTime = System.currentTimeMillis();
+            while (System.currentTimeMillis() < startTime + 30000) {
+                if (client != null && client.isClosed()) {
+                    try {
+                        client.reconnectBlocking();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }else{
+                    rc_intent.putExtra("WebSocketServiceState","reconnect success");
+                    sendBroadcast(rc_intent);
+                    break;
+                }
+            }
+            Log.i("WebSocketService:reconnect_thread","reconnect_thread finish");
         }
     }
 
@@ -90,25 +116,7 @@ public class WebSocketService extends Service {
             Notification notification = new Notification.Builder(getApplicationContext(), "1").build();
             startForeground(1001, notification);
         }
-        reconnect_thread = new Thread() {
-            @Override
-            public void run() {
-                Log.i("WebSocketService:reconnect_thread","reconnect_thread start");
-                for(int i =0;i<50;i++) {
-                    if (client != null && client.isClosed()) {
-                        Log.i("WebSocketService:reconnect_thread", "retry:" + host + ":" + port);
-                        try {
-                            client.reconnectBlocking();
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    }else{
-                        break;
-                    }
-                }
 
-            }
-        };
         connect_thread = new Thread() {
             @Override
             public void run() {
@@ -133,20 +141,15 @@ public class WebSocketService extends Service {
             @Override
             public void onOpen(ServerHandshake handshakedata) {
                 Log.i("WebSocketService:onOpen","isOpen:" + String.valueOf(client.isOpen()));
-                rc_intent.putExtra("is_connect",client.isOpen());
+                rc_intent.putExtra("WebSocketServiceState","connected");
                 sendBroadcast(rc_intent);
                 if(client.isOpen()){
                     if (check_update()){
-                        rc_intent.putExtra("check_update",true);
+                        rc_intent.putExtra("WebSocketServiceState","check_updating");
                         sendBroadcast(rc_intent);
                         update_apk();
-                    }else{
-                        rc_intent.putExtra("check_update",false);
-                        sendBroadcast(rc_intent);
                     }
                     sendDeviceData();
-                    initConfig();
-                    startService(new Intent(WebSocketService.this,OfficialAccountsService.class));
                 }
                 super.onOpen(handshakedata);
             }
@@ -155,9 +158,11 @@ public class WebSocketService extends Service {
             public void onError(Exception ex) {
                 Log.i("WebSocketService:onError",ex.toString());
                 if(ex.toString().indexOf("Connection refused") != -1){
-                    connect_thread.interrupt();
+                    if(connect_thread.isAlive()){
+                        connect_thread.interrupt();
+                    }
                 }else{
-                    rc_intent.putExtra("is_connect",false);
+                    rc_intent.putExtra("WebSocketServiceState","connect_error");
                     sendBroadcast(rc_intent);
                 }
             }
@@ -165,12 +170,13 @@ public class WebSocketService extends Service {
             @Override
             public void onClose(int code, String reason, boolean remote) {
                 Log.i("WebSocketClientUtil:onClose","code:"+String.valueOf(code)+"reason:"+reason);
-                super.onClose(code, reason, remote);
                 if(code != 1000){
-                    reconnect_thread.interrupt();
-                    reconnect_thread.start();
+                    ReconnectThread mr=new ReconnectThread();
+                    Thread th=new Thread(mr);
+                    th.start();
                 }else{
-                    stopService(new Intent(WebSocketService.this,OfficialAccountsService.class));
+                    rc_intent.putExtra("WebSocketServiceState","connect_close");
+                    sendBroadcast(rc_intent);
                 }
             }
 
@@ -184,14 +190,19 @@ public class WebSocketService extends Service {
                     String data  = json_message.getString("data");
                     switch (task_name){
                         case "start_hook":
+                            closeApp(package_name);
                             controlHook(package_name,true);
+                            openApp(package_name);
                             break;
                         case "stop_hook":
+                            closeApp(package_name);
                             controlHook(package_name,false);
                             break;
-                        case "update_js_config":
+                        case "update_config":
+                            closeApp(package_name);
                             updateJsConfig(package_name,data);
-                            copy_config(package_name);
+                            copy_js_config(package_name);
+                            openApp(package_name);
                             break;
                         default:
                             send("task_name not correct");
@@ -204,7 +215,6 @@ public class WebSocketService extends Service {
             }
         };
         client.setConnectionLostTimeout(500);
-        reconnect_thread.interrupt();
         connect_thread.interrupt();
         connect_thread.start();
     }
@@ -279,9 +289,10 @@ public class WebSocketService extends Service {
         }
     }
 
-    private boolean copy_config(String package_name){
+    private boolean copy_js_config(String package_name){
         String basedir = "/data/system/xsettings/mydemo/jscfg/";
         try {
+            Log.i("WebSocketService:copy_js_config",package_name);
             //读取模板脚本
             File base_file = new File(basedir + package_name + "/base_config.js");
             FileInputStream base_config_js = new FileInputStream(base_file);
@@ -290,30 +301,32 @@ public class WebSocketService extends Service {
             String result = new String(buffer).replace("{host}",host).replace("{port}",port);
             //copy
             File config_js = new File(basedir + package_name + "/config.js");
-            FileOutputStream file = new FileOutputStream(config_js);
             config_js.setWritable(true);
             config_js.setExecutable(true);
             config_js.setReadable(true);
+            FileOutputStream file = new FileOutputStream(config_js);
             file.write(result.getBytes());
             file.flush();
             file.close();
             Os.chmod(config_js.getAbsolutePath(), 0777);
             return true;
         } catch (ErrnoException|IOException ex){
-            Log.i("WebSocketService:copy_config",package_name + ":" + ex.toString());
+            Log.i("WebSocketService:copy_js_config",package_name + ":" + ex.toString());
         }
         return false;
     }
 
     private void initConfig(){
+        //测试方法，发行版不应该被使用
         List<PackageInfo> pakcage_info = getPackageManager().getInstalledPackages(0);
         for(int i=0;i<pakcage_info.size();i++) {
             String pakcage_name = pakcage_info.get(i).packageName;
             if (!isSystemPakcage(pakcage_name)) {
                 String basepath = "/data/system/xsettings/mydemo/jscfg/" + pakcage_name + "/base_config.js";
                 File file = new File(basepath);
+                Log.i("WebSocketService:initConfig",basepath+":"+file.exists());
                 if(file.exists()){
-                    copy_config(pakcage_name);
+                    copy_js_config(pakcage_name);
                 }
 
             }
@@ -356,8 +369,6 @@ public class WebSocketService extends Service {
 
     public void update_apk(){
 
-        //如果相等的话表示当前的sdcard挂载在手机上并且是可用的
-        // http://10.120.66.180:8425/file
         String uri = "http://" + host + ":" + port +"/file";
         String path = "/storage/emulated/0/Download/com.example.mydemoservice_update.apk";
         try {
@@ -402,12 +413,14 @@ public class WebSocketService extends Service {
 
     private boolean isStartHook(String package_name) {
         String path = "/data/system/xsettings/mydemo/persisit/"+package_name+"/persist_mydemo";
-        return new File(path).exists();
+        File file = new File(path);
+        return file.exists();
     }
 
     private boolean isHasJSConfig(String package_name) {
         String path = "/data/system/xsettings/mydemo/jscfg/"+package_name+"/base_config.js";
-        return new File(path).exists();
+        File file = new File(path);
+        return file.exists();
     }
 
     private boolean isSystemPakcage(String package_name){
@@ -417,6 +430,7 @@ public class WebSocketService extends Service {
                 return false;
             }
         }catch (PackageManager.NameNotFoundException ex){
+            Log.i("WebSocketService:isSystemPakcage",ex.toString());
         }
         return true;
     }
@@ -428,14 +442,36 @@ public class WebSocketService extends Service {
             PackageInfo packInfo = packageManager.getPackageInfo(getPackageName(), 0);
             String versio_name = packInfo.versionName;
             Log.i("check_update",packInfo.versionName);
-            if(get_new_version() > Double.valueOf(versio_name));
+            if(get_new_version() > Double.valueOf(versio_name)){
                 return true;
+            }
         } catch (PackageManager.NameNotFoundException ex){}
-        return  true;
+        return  false;
     }
 
     public double get_new_version(){
-        return  1.5;
+        return  0.0;
+    }
+
+    public void openApp(String package_name){
+        Intent intent = getPackageManager().getLaunchIntentForPackage(package_name);
+        if (intent != null) {
+            if (!getPackageName().equals(package_name)) {
+                startActivity(intent);
+                Log.i("ControlBase:openApp","open "+package_name+" success");
+            }
+        }
+    }
+
+    public void closeApp(String package_name){
+        try {
+            ActivityManager am = (ActivityManager) this.getSystemService(ACTIVITY_SERVICE);
+            Method method = Class.forName("android.app.ActivityManager").getMethod("forceStopPackage", String.class);
+            method.invoke(am, package_name);
+            Log.i("ControlBase:closeApp","close "+package_name+" success");
+        } catch (IllegalArgumentException|ReflectiveOperationException ex){
+            Log.i("ControlBase:closeApp","close "+package_name+" fail:"+ex.toString());
+        }
     }
 
 

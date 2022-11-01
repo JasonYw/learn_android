@@ -130,29 +130,42 @@ public class MainActivity extends AppCompatActivity {
     class MainReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
-            Log.i("MainActivity:onReceive","get msg");
-            boolean is_connected = intent.getBooleanExtra("is_connect",false);
-            if(is_connected){
-                if(is_remember.isChecked()){
-                    editor.putString("connect_host",host.getText().toString());
-                    editor.putString("connect_port",port.getText().toString());
-                    editor.commit();
-                    Log.i("MainActivity:onReceive","edit commit");
-                    connect.setText("checking update");
-                    boolean check_update = intent.getBooleanExtra("check_update",false);
-                    if(check_update){
-                        connect.setText("updating");
+            String WebSocketServiceState = intent.getStringExtra("WebSocketServiceState");
+            Log.i("MainActivity:onReceive","WebSocketServiceState:"+WebSocketServiceState);
+            switch (WebSocketServiceState){
+                case "connected":
+                    if(is_remember.isChecked()){
+                        editor.putString("connect_host",host.getText().toString());
+                        editor.putString("connect_port",port.getText().toString());
+                        editor.commit();
+                        Log.i("MainActivity:onReceive","edit commit");
+                        connect.setText("checking update");
+                        boolean check_update = intent.getBooleanExtra("check_update",false);
+                        if(check_update){
+                            connect.setText("updating");
+                        }
                     }
-                }
-                connect.setEnabled(true);
-                connect.setText("connect");
-                startActivity(info_intent);
-            }else{
-                stopService(wb_intent);
-                Log.i("MainActivity:onReceive","stopService");
-                connect.setEnabled(true);
-                connect.setText("connect");
+                    connect.setEnabled(true);
+                    connect.setText("connect");
+                    startActivity(info_intent);
+                    break;
+                case "reconnect":
+                    connect.setEnabled(false);
+                    connect.setText(WebSocketServiceState);
+                    break;
+                case "reconnect_finish":
+                    connect.setEnabled(true);
+                    connect.setText("connect");
+                    startActivity(info_intent);
+                    break;
+                case "connect_close":
+                    connect.setEnabled(true);
+                    connect.setText("connect");
+                    break;
+                default:
+                    break;
             }
+
         }
     }
 
