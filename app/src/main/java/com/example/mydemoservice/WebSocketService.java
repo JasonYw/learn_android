@@ -27,6 +27,7 @@ import android.system.Os;
 import android.text.format.Formatter;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.FileProvider;
 
@@ -52,12 +53,19 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import okhttp3.Call;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 
 public class WebSocketService extends Service {
 
     String host;
     String port;
+    String username;
+    String password;
+    boolean token;
     WebSocketClientUtil client;
     Intent rc_intent = new Intent();
     Thread connect_thread;
@@ -77,10 +85,17 @@ public class WebSocketService extends Service {
             Log.i("WebSocketService:reconnect_thread", "retry:" + host + ":" + port);
             rc_intent.putExtra("WebSocketServiceState","reconnect");
             sendBroadcast(rc_intent);
-            long startTime = System.currentTimeMillis();
-            while (System.currentTimeMillis() < startTime + 30000) {
+            long startTime;
+            startTime = System.currentTimeMillis();
+            authWebsocket("reconnect");
+            while (true) {
                 if (client != null && client.isClosed()) {
                     try {
+                        long nowtime = System.currentTimeMillis();
+                        if((nowtime - startTime) > 86400000){
+                            authWebsocket("reconnect");
+                            startTime = System.currentTimeMillis();
+                        }
                         client.reconnectBlocking();
                     } catch (InterruptedException e) {
                         e.printStackTrace();
@@ -106,8 +121,13 @@ public class WebSocketService extends Service {
         m_receiver = new MainReceiver();
         host = intent.getStringExtra("connect_host");
         port = intent.getStringExtra("connect_port");
+        username = intent.getStringExtra("connect_username");
+        password = intent.getStringExtra("connect_password");
+        token = false;
         Log.i("WebSocketService:onStartCommand",host);
         Log.i("WebSocketService:onStartCommand",port);
+        Log.i("WebSocketService:onStartCommand",username);
+        Log.i("WebSocketService:onStartCommand",password);
         rc_intent.setAction("MRecevier");
         NotificationChannel channel = new NotificationChannel("1", "WebSocketService", NotificationManager.IMPORTANCE_HIGH);
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -122,10 +142,12 @@ public class WebSocketService extends Service {
             public void run() {
                 Log.i("WebSocketService:connect_thread","connect_thread start");
                 try {
-                    client.connectBlocking();
+                    authWebsocket("connect");
+                    if(token){
+                        client.connectBlocking();
+                    }
                 }catch (InterruptedException ex){
                     Log.i("WebSocketService:connect_thread",ex.toString());
-
                 }
             }
         };
@@ -135,7 +157,8 @@ public class WebSocketService extends Service {
     }
 
     public void initClient() {
-        String url = "ws://" + host + ":" + port + "/ws";
+        String url = "ws://" + host + ":" + port + "/ws/app?username=" + username;
+        Log.i("WebSocketService:onStartCommand",url);
         URI uri = URI.create(url);
         client = new WebSocketClientUtil(uri) {
             @Override
@@ -144,10 +167,10 @@ public class WebSocketService extends Service {
                 rc_intent.putExtra("WebSocketServiceState","connected");
                 sendBroadcast(rc_intent);
                 if(client.isOpen()){
-                    if (check_update()){
+                    if (checkUpdate()){
                         rc_intent.putExtra("WebSocketServiceState","check_updating");
                         sendBroadcast(rc_intent);
-                        update_apk();
+                        updateApk();
                     }
                     sendDeviceData();
                 }
@@ -170,6 +193,7 @@ public class WebSocketService extends Service {
             @Override
             public void onClose(int code, String reason, boolean remote) {
                 Log.i("WebSocketClientUtil:onClose","code:"+String.valueOf(code)+"reason:"+reason);
+                cloaseAllApp();
                 if(code != 1000){
                     ReconnectThread mr=new ReconnectThread();
                     Thread th=new Thread(mr);
@@ -201,9 +225,12 @@ public class WebSocketService extends Service {
                         case "update_config":
                             closeApp(package_name);
                             updateJsConfig(package_name,data);
-                            copy_js_config(package_name);
+                            copyJsConfig(package_name);
                             openApp(package_name);
                             break;
+                        case "on_close":
+                            rc_intent.putExtra("WebSocketServiceState","connect_close");
+                            sendBroadcast(rc_intent);
                         default:
                             send("task_name not correct");
                             break;
@@ -215,6 +242,7 @@ public class WebSocketService extends Service {
             }
         };
         client.setConnectionLostTimeout(500);
+
         connect_thread.interrupt();
         connect_thread.start();
     }
@@ -224,8 +252,12 @@ public class WebSocketService extends Service {
         try {
             data.put("local_ip", getLocalIp());
             data.put("android_id", getAndroidId());
-            data.put("OsName",getOsName());
+            data.put("os_version",getOsVersion());
+            data.put("sdk_verison",getSdkVersion());
+            data.put("brand_info",getBrandInfo());
+            data.put("app_version",getAppVersion());
             data.put("package_info",getPackageInfo());
+            data.put("memory_info",getMemoryInfo());
             client.send(data.toString());
         } catch (JSONException ex) {
             client.send(data.toString());
@@ -289,16 +321,16 @@ public class WebSocketService extends Service {
         }
     }
 
-    private boolean copy_js_config(String package_name){
+    private boolean copyJsConfig(String package_name){
         String basedir = "/data/system/xsettings/mydemo/jscfg/";
         try {
-            Log.i("WebSocketService:copy_js_config",package_name);
+            Log.i("WebSocketService:copyJsConfig",package_name);
             //读取模板脚本
             File base_file = new File(basedir + package_name + "/base_config.js");
             FileInputStream base_config_js = new FileInputStream(base_file);
             byte[] buffer = new byte[base_config_js.available()];
             base_config_js.read(buffer);
-            String result = new String(buffer).replace("{host}",host).replace("{port}",port);
+            String result = new String(buffer).replace("{host}",host).replace("{port}",port).replace("{android_id}",getAndroidId()).replace("{package_name}",package_name);
             //copy
             File config_js = new File(basedir + package_name + "/config.js");
             config_js.setWritable(true);
@@ -311,30 +343,44 @@ public class WebSocketService extends Service {
             Os.chmod(config_js.getAbsolutePath(), 0777);
             return true;
         } catch (ErrnoException|IOException ex){
-            Log.i("WebSocketService:copy_js_config",package_name + ":" + ex.toString());
+            Log.i("WebSocketService:copyJsConfig",package_name + ":" + ex.toString());
         }
         return false;
     }
 
-    private void initConfig(){
-        //测试方法，发行版不应该被使用
-        List<PackageInfo> pakcage_info = getPackageManager().getInstalledPackages(0);
-        for(int i=0;i<pakcage_info.size();i++) {
-            String pakcage_name = pakcage_info.get(i).packageName;
-            if (!isSystemPakcage(pakcage_name)) {
-                String basepath = "/data/system/xsettings/mydemo/jscfg/" + pakcage_name + "/base_config.js";
-                File file = new File(basepath);
-                Log.i("WebSocketService:initConfig",basepath+":"+file.exists());
-                if(file.exists()){
-                    copy_js_config(pakcage_name);
+    private void cloaseAllApp(){
+        Log.i("WebSocketService:cloaseAllApp","start");
+        try{
+            JSONArray pakcage_info = getPackageInfo().getJSONArray("package_info");
+            for(int i =0;i< pakcage_info.length();i++){
+                JSONObject json_ = pakcage_info.getJSONObject(i);
+                if(json_.getBoolean("is_start_hook")){
+                    String package_name = json_.getString("package_name");
+                    closeApp(package_name);
                 }
-
             }
+        }catch (JSONException ex){
+            Log.i("WebSocketService:cloaseAllApp",ex.toString());
         }
-
     }
 
-    private String getPackageInfo(){
+    private void openAllApp(){
+        Log.i("WebSocketService:openAllApp","start");
+        try{
+            JSONArray pakcage_info = getPackageInfo().getJSONArray("package_info");
+            for(int i =0;i< pakcage_info.length();i++){
+                JSONObject json_ = pakcage_info.getJSONObject(i);
+                if(json_.getBoolean("is_start_hook")){
+                    String package_name = json_.getString("package_name");
+                    openApp(package_name);
+                }
+            }
+        }catch (JSONException ex){
+            Log.i("WebSocketService:openAllApp",ex.toString());
+        }
+    }
+
+    private JSONObject getPackageInfo(){
         JSONObject data = new JSONObject();
         JSONArray data_array = new JSONArray();
         List<PackageInfo> pakcage_info = getPackageManager().getInstalledPackages(0);
@@ -360,14 +406,10 @@ public class WebSocketService extends Service {
         try {
             data.put("package_info", data_array);
         } catch (JSONException ex){}
-        return  data.toString();
+        return  data;
     }
 
-    private String getOsName() {
-        return android.os.Build.VERSION.CODENAME;
-    }
-
-    public void update_apk(){
+    public void updateApk(){
 
         String uri = "http://" + host + ":" + port +"/file";
         String path = "/storage/emulated/0/Download/com.example.mydemoservice_update.apk";
@@ -400,6 +442,10 @@ public class WebSocketService extends Service {
 
     }
 
+    public double getNewVersion(){
+        return  0.0;
+    }
+
     private String getAndroidId(){
         return Settings.Secure.getString(this.getContentResolver(),Settings.Secure.ANDROID_ID);
     }
@@ -409,6 +455,47 @@ public class WebSocketService extends Service {
         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
         String ipAddress = Formatter.formatIpAddress(wifiInfo.getIpAddress());
         return ipAddress;
+    }
+
+    private String getOsVersion(){
+        return Build.VERSION.RELEASE;
+    }
+
+    private String getSdkVersion(){
+        return Integer.valueOf(android.os.Build.VERSION.SDK).toString();
+    }
+
+    private String getBrandInfo(){
+        return Build.DEVICE;
+    }
+
+    public double getAppVersion(){
+        try {
+            PackageManager packageManager = getPackageManager();
+            //getPackageName()是你当前类的包名，0代表是获取版本信息
+            PackageInfo packInfo = packageManager.getPackageInfo(getPackageName(), 0);
+            String versio_name = packInfo.versionName;
+            Log.i("WebSocketService：getAppVersion", packInfo.versionName);
+            return Double.valueOf(versio_name);
+        }catch (PackageManager.NameNotFoundException ex){
+            Log.i("WebSocketService：getAppVersion", ex.toString());
+            return 1.0;
+        }
+    }
+
+    private JSONObject getMemoryInfo(){
+        JSONObject data = new JSONObject();
+        ActivityManager activityManager = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memInfo = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memInfo);
+        try{
+            data.put("avail_mem",memInfo.availMem / 1024/1024);
+            data.put("total_mem",memInfo.totalMem/1024/1024);
+        }catch (JSONException ex){
+            Log.i("WebSocketService:getMemoryInfo",ex.toString());
+        }
+
+        return data;
     }
 
     private boolean isStartHook(String package_name) {
@@ -435,22 +522,47 @@ public class WebSocketService extends Service {
         return true;
     }
 
-    public boolean check_update(){
-        try {
-            PackageManager packageManager = getPackageManager();
-            //getPackageName()是你当前类的包名，0代表是获取版本信息
-            PackageInfo packInfo = packageManager.getPackageInfo(getPackageName(), 0);
-            String versio_name = packInfo.versionName;
-            Log.i("check_update",packInfo.versionName);
-            if(get_new_version() > Double.valueOf(versio_name)){
-                return true;
+    public void authWebsocket(String for_which){
+        switch (for_which){
+            case "connect":
+                rc_intent.putExtra("WebSocketServiceState","auth_fail");
+                break;
+            case "reconnect":
+                rc_intent.putExtra("WebSocketServiceState","refresh_token_fail");
+                break;
+        }
+        String url = "http://" + host + ":" + port +"/ws/auth?username=" + username + "&password=" + password;
+        Log.i("WebSocketService:authWebsocket","url:"+url);
+        OkHttpClient client = new OkHttpClient();
+        Request request = new Request.Builder().url(url).get().build();
+        Call call = client.newCall(request);
+        try{
+            Response response = call.execute();
+            String str_response = response.body().string();
+            Log.i("WebSocketService:authWebsocket","response.body():"+ str_response);
+            if(str_response == ""){
+                token = false;
+                sendBroadcast(rc_intent);
+            }else{
+                token = true;
             }
-        } catch (PackageManager.NameNotFoundException ex){}
-        return  false;
+            Log.i("WebSocketService:authWebsocket","token:"+ token);
+
+        }catch (IOException ex){
+            token = false;
+            sendBroadcast(rc_intent);
+            Log.i("WebSocketService:authWebsocket",ex.toString());
+
+        }
     }
 
-    public double get_new_version(){
-        return  0.0;
+    public boolean checkUpdate() {
+        if (getNewVersion() > getAppVersion()) {
+            return true;
+        }else{
+            return false;
+        }
+
     }
 
     public void openApp(String package_name){
@@ -487,7 +599,6 @@ public class WebSocketService extends Service {
                 }catch (JSONException ex){
                     Log.i("WebSocketService.MainReceiver",ex.toString());
                 }
-
             }
         }
     }

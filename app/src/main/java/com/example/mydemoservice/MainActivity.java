@@ -1,53 +1,37 @@
 package com.example.mydemoservice;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.FileProvider;
-
-
 import android.Manifest;
 import android.app.ActivityManager;
-import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.Toast;
-
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
 public class MainActivity extends AppCompatActivity {
 
-    private Button connect;
+    private  Button connect;
     private  SharedPreferences sp;
     private  SharedPreferences.Editor editor;
     private  EditText host;
     private  EditText port;
+    private  EditText username;
+    private  EditText password;
     private  CheckBox is_remember;
     MainReceiver m_receiver;
     String connect_host;
     String connect_port;
+    String connect_username;
+    String connect_password;
     Intent wb_intent;
     Intent info_intent;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,30 +67,36 @@ public class MainActivity extends AppCompatActivity {
         is_remember = findViewById(R.id.remember);
         host =findViewById(R.id.host);
         port =findViewById(R.id.port);
+        username = findViewById(R.id.username);
+        password = findViewById(R.id.password);
         connect = findViewById(R.id.connect);
 
         //从存储中获取数据
         connect_host =  sp.getString("connect_host",null);
         connect_port =  sp.getString("connect_port",null);
-        if (isServiceRunning(getPackageName()+".WebSocketService")){
-            Log.i("MainActivity:onCreate","startActivity");
-            startActivity(info_intent);
-        }
+        connect_username = sp.getString("connect_username",null);
+        connect_password = sp.getString("connect_password",null);
     }
 
     @Override
     protected void onStart() {
-        Log.i("MainActivity","onStart");
-
         super.onStart();
+        Log.i("MainActivity","onStart");
+        if (isServiceRunning(getPackageName()+".WebSocketService")){
+            Log.i("MainActivity:onCreate","startActivity");
+            startActivity(info_intent);
+        }
+
         //初始化init
         wb_intent.putExtra("connect_host",connect_host);
         wb_intent.putExtra("connect_port",connect_port);
 
         //初始化表单数据
-        if(connect_host != null && connect_host != null) {
+        if(connect_host != null && connect_host != null && connect_password != null && connect_username != null) {
             host.setText(connect_host);
             port.setText(connect_port);
+            username.setText(connect_username);
+            password.setText(connect_password);
             is_remember.setChecked(true);
         }
 
@@ -118,10 +108,16 @@ public class MainActivity extends AppCompatActivity {
                 stopService(wb_intent);
                 connect_host = host.getText().toString();
                 connect_port = port.getText().toString();
+                connect_username = username.getText().toString();
+                connect_password = password.getText().toString();
                 Log.i("MainActivity:connect_host",connect_host);
                 Log.i("MainActivity:connect_port",connect_port);
+                Log.i("MainActivity:connect_username",connect_username);
+                Log.i("MainActivity:connect_password",connect_password);
                 wb_intent.putExtra("connect_host",connect_host);
                 wb_intent.putExtra("connect_port",connect_port);
+                wb_intent.putExtra("connect_username",connect_username);
+                wb_intent.putExtra("connect_password",connect_password);
                 startForegroundService(wb_intent);
             }
         });
@@ -137,6 +133,8 @@ public class MainActivity extends AppCompatActivity {
                     if(is_remember.isChecked()){
                         editor.putString("connect_host",host.getText().toString());
                         editor.putString("connect_port",port.getText().toString());
+                        editor.putString("connect_username",username.getText().toString());
+                        editor.putString("connect_password",password.getText().toString());
                         editor.commit();
                         Log.i("MainActivity:onReceive","edit commit");
                         connect.setText("checking update");
@@ -162,10 +160,15 @@ public class MainActivity extends AppCompatActivity {
                     connect.setEnabled(true);
                     connect.setText("connect");
                     break;
+                case "auth_fail":
+                    connect.setEnabled(true);
+                    connect.setText("connect");
+                    break;
+                case "refresh_token_fail":
+                    connect.setEnabled(false);
                 default:
                     break;
             }
-
         }
     }
 
@@ -178,7 +181,6 @@ public class MainActivity extends AppCompatActivity {
         }
         return false;
     }
-
 
     public void onBackPressed(){}
 
