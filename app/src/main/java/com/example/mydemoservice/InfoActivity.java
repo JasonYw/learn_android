@@ -15,27 +15,37 @@ import androidx.appcompat.app.AppCompatActivity;
 public class InfoActivity extends AppCompatActivity {
 
     Button disconnect;
+    Button connect;
     Intent wbintent;
-    InfoActivity.MainReceiver m_receiver;
+    InfoActivity.WebSocketServiceReceiver wb_receiver;
+    Utils utils;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_info);
         Log.i("InfoActivity","onCreate");
-        m_receiver = new InfoActivity.MainReceiver();
+        wb_receiver = new InfoActivity.WebSocketServiceReceiver();
         IntentFilter filter = new IntentFilter();
-        filter.addAction("MRecevier");
-        registerReceiver(m_receiver,filter);
+        filter.addAction("WebSocketServiceReceiver");
+        registerReceiver(wb_receiver,filter);
         wbintent = new Intent(InfoActivity.this,WebSocketService.class);
+
+        //初始化button
         disconnect = findViewById(R.id.disconnect);
+        connect = findViewById(R.id.connect);
+
+        //初始化工具类
+        utils = new Utils(null,null);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-
         Log.i("InfoActivity","onStart");
+        if(!utils.isServiceRunning(getPackageName()+".WebSocketService")){
+            startActivity(new Intent(InfoActivity.this,MainActivity.class));
+        }
         disconnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -46,7 +56,7 @@ public class InfoActivity extends AppCompatActivity {
         });
     }
 
-    class MainReceiver extends BroadcastReceiver {
+    class WebSocketServiceReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
             String WebSocketServiceState = intent.getStringExtra("WebSocketServiceState");

@@ -1,7 +1,6 @@
 package com.example.mydemoservice;
 import androidx.appcompat.app.AppCompatActivity;
 import android.Manifest;
-import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -25,13 +24,14 @@ public class MainActivity extends AppCompatActivity {
     private  EditText username;
     private  EditText password;
     private  CheckBox is_remember;
-    MainReceiver m_receiver;
+    WebSocketServiceReceiver wb_receiver;
     String connect_host;
     String connect_port;
     String connect_username;
     String connect_password;
     Intent wb_intent;
     Intent info_intent;
+    Utils utils;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,10 +53,10 @@ public class MainActivity extends AppCompatActivity {
 
 
         //初始化service intent 以及 Reciver 以及 下一个Activity intent
-        m_receiver = new MainReceiver();
+        wb_receiver = new WebSocketServiceReceiver();
         IntentFilter filter = new IntentFilter();
-        filter.addAction("MRecevier");
-        registerReceiver(m_receiver,filter);
+        filter.addAction("WebSocketServiceReceiver");
+        registerReceiver(wb_receiver,filter);
         info_intent = new Intent(MainActivity.this, InfoActivity.class);
         wb_intent =  new Intent(MainActivity.this, WebSocketService.class);
 
@@ -76,13 +76,16 @@ public class MainActivity extends AppCompatActivity {
         connect_port =  sp.getString("connect_port",null);
         connect_username = sp.getString("connect_username",null);
         connect_password = sp.getString("connect_password",null);
+
+        //初始化工具类
+        utils = new Utils(null,null);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
         Log.i("MainActivity","onStart");
-        if (isServiceRunning(getPackageName()+".WebSocketService")){
+        if (utils.isServiceRunning(getPackageName()+".WebSocketService")){
             Log.i("MainActivity:onCreate","startActivity");
             startActivity(info_intent);
         }
@@ -123,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    class MainReceiver extends BroadcastReceiver {
+    class WebSocketServiceReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
             String WebSocketServiceState = intent.getStringExtra("WebSocketServiceState");
@@ -170,16 +173,6 @@ public class MainActivity extends AppCompatActivity {
                     break;
             }
         }
-    }
-
-    private boolean isServiceRunning(String ServicePackageName) {
-        ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
-            if (ServicePackageName.equals(service.service.getClassName())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     public void onBackPressed(){}
