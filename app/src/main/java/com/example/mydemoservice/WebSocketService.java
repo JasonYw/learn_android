@@ -148,7 +148,7 @@ public class WebSocketService extends Service {
         };
         Timer timer = new Timer();
         Log.i("WebSocketService:onStartCommand","start HeartBeatThread");
-        timer.schedule(HeartBeatThread,1,120*1000);
+        timer.schedule(HeartBeatThread,0,10*1000);
         return super.onStartCommand(intent, flags, startId);
     }
 
@@ -162,11 +162,11 @@ public class WebSocketService extends Service {
                 Log.i("WebSocketService:onOpen","isOpen:" + String.valueOf(client.isOpen()));
                 if(client.isOpen()){
                     utils.copyAndUpdateAllConfig();
-                    if (utils.checkUpdate()){
-                        broadcast_intent.putExtra("WebSocketServiceState","check_updating");
-                        sendBroadcast(broadcast_intent);
-                        updateApk();
-                    }
+//                    if (utils.checkUpdate()){
+//                        broadcast_intent.putExtra("WebSocketServiceState","check_updating");
+//                        sendBroadcast(broadcast_intent);
+//                        updateApk();
+//                    }
                     sendDeviceData();
                 }
                 broadcast_intent.putExtra("WebSocketServiceState","connected");
@@ -214,26 +214,48 @@ public class WebSocketService extends Service {
                     Log.i("WebSocketClientUtil:onMessage","task_name:"+task_name);
                     String package_name = json_message.getString("package_name");
                     String data  = json_message.getString("data");
+                    JSONObject response_ = new JSONObject();
+                    response_.put("task_name",task_name);
+                    response_.put("package_name",package_name);
+                    response_.put("error",null);
+                    Boolean is_success;
                     switch (task_name){
                         case "start_hook":
                             utils.closeApp(package_name);
-                            utils.controlHook(package_name,true);
+                            is_success = utils.controlHook(package_name,true);
                             utils.openApp(package_name);
+                            response_.put("is_success",is_success);
+                            send(response_.toString());
                             break;
                         case "stop_hook":
                             utils.closeApp(package_name);
-                            utils.controlHook(package_name,false);
+                            is_success = utils.controlHook(package_name,false);
+                            response_.put("is_success",is_success);
+                            send(response_.toString());
                             break;
                         case "update_config":
                             utils.closeApp(package_name);
-                            utils.updateJsConfig(package_name,data);
-                            utils.copyJsConfig(package_name);
+                            utils.controlHook(package_name,false);
+                            Boolean is_success_a =  utils.updateJsConfig(package_name,data);
+                            Boolean is_success_b = utils.copyJsConfig(package_name);
+                            is_success = is_success_a && is_success_b;
+                            response_.put("is_success",is_success);
+                            send(response_.toString());
+                            break;
+                        case "update_apk":
+                            utils.cloaseAllApp();
+                            updateApk(data,package_name);
                             break;
                         case "on_close":
                             broadcast_intent.putExtra("WebSocketServiceState","connect_close");
                             sendBroadcast(broadcast_intent);
+                            response_.put("is_success",true);
+                            send(response_.toString());
+                            break;
                         default:
                             send("task_name not correct");
+                            response_.put("error","task_name not correct");
+                            send(response_.toString());
                             break;
                     }
                     sendDeviceData();
@@ -242,8 +264,7 @@ public class WebSocketService extends Service {
                 }
             }
         };
-        client.setConnectionLostTimeout(500);
-
+        client.setConnectionLostTimeout(60000);
         connect_thread.interrupt();
         connect_thread.start();
     }
@@ -299,11 +320,10 @@ public class WebSocketService extends Service {
         }
     }
 
-    public void updateApk(){
-        String uri = "http://" + host + ":" + port +"/file";
-        String path = "/storage/emulated/0/Download/com.example.mydemoservice_update.apk";
+    public void updateApk(String download_url,String package_name){
+        String path = "/storage/emulated/0/Download/" + package_name + ".apk";
         try {
-            URL url = new URL(uri);
+            URL url = new URL(download_url);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setConnectTimeout(5000);
             //获取到文件的大小

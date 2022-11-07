@@ -27,8 +27,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class Utils {
 
@@ -37,6 +42,10 @@ public class Utils {
     public String host;
     public String port;
     public Context mcontext = MyApplication.getContext();
+    private static final String AES_CBC_PKCS5_PADDING = "AES/CBC/PKCS5Padding";
+    private static final String AES = "AES";
+    private static final String KEY = "0123456789012345";
+    private static final String IV = "0123456789012345";
 
 
     Utils(String connect_host,String connect_port){
@@ -44,7 +53,7 @@ public class Utils {
         port = connect_port;
     }
 
-    public void controlHook(String package_name, Boolean on){
+    public boolean controlHook(String package_name, Boolean on){
         File file = new File("/data/system/xsettings/mydemo/persisit/"+package_name+"/persist_mydemo");
         Log.i("Utils:controlHook","on:"+on.toString());
         if(on) {
@@ -54,12 +63,15 @@ public class Utils {
                 Os.chmod("/data/system/xsettings/mydemo/persisit/"+package_name, 0777);
                 Os.chmod(file.getAbsolutePath(), 0777);
                 Log.i("Utils:controlHook","chmod:"+file.getAbsolutePath()+" success");
+                return true;
             }catch (ErrnoException ex){
                 Log.i("Utils:controlHook","chmod:"+file.getAbsolutePath()+" error:"+ex.toString());
+                return false;
             }
         }else{
             Boolean stop = file.delete();
             Log.i("Utils:controlHook",package_name +" stop:"+stop.toString());
+            return false;
         }
     }
 
@@ -79,17 +91,22 @@ public class Utils {
             Log.i("Utils:updateJsConfig","chmod:"+config_dir.getAbsolutePath()+" error:"+ex.toString());
         }
         Log.i("Utils:updateJsConfig",package_name + " jsdir create success");
-
-        byte[] b_context = Base64.getDecoder().decode(text);
+        byte[]  b_context = Base64.getDecoder().decode(text);
         for(int i=0;i<b_context.length;i++){
             if(b_context[i] < 0 ){
                 b_context[i] += 256;
             }
         }
+        byte[]  context = Base64.getDecoder().decode(new String(b_context));
+        for(int i=0;i<context.length;i++){
+            if(context[i] < 0 ){
+                context[i] += 256;
+            }
+        }
         try {
             File config_js = new File(basedir + package_name + "/base_config.js");
             FileOutputStream file = new FileOutputStream(config_js);
-            file.write(b_context);
+            file.write(context);
             file.flush();
             file.close();
             Os.chmod(config_js.getAbsolutePath(), 0777);
@@ -238,6 +255,9 @@ public class Utils {
     }
 
     public boolean isSystemPakcage(String package_name){
+        if(package_name.equals("com.example.mydemoservice")){
+            return true;
+        }
         try {
             PackageInfo a = mcontext.getPackageManager().getPackageInfo(package_name,0);
             if ((a.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) <= 0){
@@ -321,6 +341,20 @@ public class Utils {
             return false;
         }
 
+    }
+
+    public String decryptAes(String strCipherText) {
+        try {
+            SecretKeySpec secretKeySpec = new SecretKeySpec(KEY.getBytes(StandardCharsets.UTF_8), AES);
+            Cipher cipher = Cipher.getInstance(AES_CBC_PKCS5_PADDING);
+            IvParameterSpec ivParameterSpec = new IvParameterSpec(IV.getBytes(StandardCharsets.UTF_8));
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivParameterSpec);
+            byte[] clearText = cipher.doFinal(strCipherText.getBytes(StandardCharsets.UTF_8),0,16);
+            return clearText.toString();
+        } catch (Exception e) {
+            Log.i("Utils：decryptAes",e.toString());
+        }
+        return null;
     }
 
 }
