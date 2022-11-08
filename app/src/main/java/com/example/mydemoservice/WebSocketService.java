@@ -283,6 +283,7 @@ public class WebSocketService extends Service {
             client.send(data.toString());
         } catch (JSONException ex) {
             client.send(data.toString());
+            Log.i("WebSocketService:sendDeviceData",ex.toString());
         }
     }
 
